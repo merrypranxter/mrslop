@@ -238,25 +238,3 @@ export const sendMrSlopMessage = async ({
     throw error;
   }
 };
-
-/**
- * Temporary compile-time bridge for the Ghost-derived Terminal component.
- * App.tsx no longer renders that component; final cleanup removes it entirely.
- */
-export const sendMessageToGemini = async (
-  history: Message[],
-  newMessage: string,
-  attachments: Attachment[] = [],
-  _isMasked = false,
-  systemNotes = '',
-  signal?: AbortSignal,
-): Promise<string> => {
-  const envelope = await sendMrSlopMessage({
-    history,
-    userMessage: systemNotes ? `${systemNotes}\n\n${newMessage}` : newMessage,
-    attachments,
-    systemInstruction: 'You are Mr. Slop. Respond helpfully and conversationally. This compatibility path is temporary.',
-    signal,
-  });
-  return envelope.text;
-};

@@ -156,6 +156,38 @@
   font-size: 8px;
 }
 
+.slop-message-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.slop-message-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid rgba(185,255,34,.2);
+  background: rgba(185,255,34,.025);
+  color: var(--slop-lime);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+
+.slop-message-actions button:hover:not(:disabled) {
+  border-color: rgba(185,255,34,.55);
+  box-shadow: 0 0 12px rgba(185,255,34,.08);
+}
+
+.slop-message-actions button:disabled {
+  color: #706d66;
+  border-color: rgba(255,255,255,.08);
+  background: transparent;
+  cursor: default;
+}
+
 .slop-thinking {
   color: var(--slop-lime);
   font-size: 9px;

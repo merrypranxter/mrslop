@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  BookmarkPlus,
   Download,
   FilePlus2,
   Mic,
@@ -19,7 +20,7 @@ import { sendMrSlopMessage } from '../services/geminiService';
 import { processFile } from '../services/fileService';
 import { isSpeechSupported, startListening, stopListening } from '../services/speechService';
 import { exportConversationToPDF, exportConversationToTXT } from '../services/exportService';
-import { checkpointSpecimen } from '../services/specimenStore';
+import { checkpointSpecimen, saveArtifact } from '../services/specimenStore';
 import {
   Attachment,
   ChoiceCardEvent,
@@ -131,6 +132,18 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     messages,
     lastModified: Date.now(),
   });
+
+  const saveReplyArtifact = (message: Message) => {
+    if (working.artifacts.some(artifact => artifact.messageId === message.id)) return;
+    const firstLine = message.content.trim().split('\n')[0];
+    const next = saveArtifact(working, {
+      messageId: message.id,
+      kind: 'other',
+      title: (firstLine || 'Mr. Slop artifact').slice(0, 72),
+      content: message.content,
+    });
+    commit(next);
+  };
 
   const processEnvelope = async (
     base: Specimen,
@@ -413,24 +426,39 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           </div>
         )}
 
-        {working.messages.map(message => (
-          <article
-            key={message.id}
-            className={`slop-message ${message.role === Role.USER ? 'from-user' : message.role === Role.MODEL ? 'from-slop' : 'from-system'}`}
-          >
-            <div className="slop-message-label">
-              {message.role === Role.USER ? 'YOU' : message.role === Role.MODEL ? 'MR. SLOP' : 'SYSTEM'}
-            </div>
-            <div className="slop-message-body">
-              {message.role === Role.MODEL ? <ParsedMessage content={message.content} /> : <span>{message.content}</span>}
-            </div>
-            {message.attachments?.length ? (
-              <div className="slop-message-files">
-                {message.attachments.map(attachment => <span key={attachment.id}><Paperclip size={10} /> {attachment.name}</span>)}
+        {working.messages.map(message => {
+          const artifactSaved = working.artifacts.some(artifact => artifact.messageId === message.id);
+          return (
+            <article
+              key={message.id}
+              className={`slop-message ${message.role === Role.USER ? 'from-user' : message.role === Role.MODEL ? 'from-slop' : 'from-system'}`}
+            >
+              <div className="slop-message-label">
+                {message.role === Role.USER ? 'YOU' : message.role === Role.MODEL ? 'MR. SLOP' : 'SYSTEM'}
               </div>
-            ) : null}
-          </article>
-        ))}
+              <div className="slop-message-body">
+                {message.role === Role.MODEL ? <ParsedMessage content={message.content} /> : <span>{message.content}</span>}
+              </div>
+              {message.attachments?.length ? (
+                <div className="slop-message-files">
+                  {message.attachments.map(attachment => <span key={attachment.id}><Paperclip size={10} /> {attachment.name}</span>)}
+                </div>
+              ) : null}
+              {message.role === Role.MODEL && (
+                <div className="slop-message-actions">
+                  <button
+                    type="button"
+                    aria-label="Save artifact"
+                    onClick={() => saveReplyArtifact(message)}
+                    disabled={artifactSaved}
+                  >
+                    <BookmarkPlus size={12} /> {artifactSaved ? 'SAVED' : 'SAVE ARTIFACT'}
+                  </button>
+                </div>
+              )}
+            </article>
+          );
+        })}
 
         {isProcessing && <div className="slop-thinking">MR. SLOP IS POKING IT WITH A STICK...</div>}
 
