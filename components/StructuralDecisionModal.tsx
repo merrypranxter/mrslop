@@ -24,7 +24,7 @@ const StructuralDecisionModal: React.FC<StructuralDecisionModalProps> = ({
     <section className="structural-modal" role="dialog" aria-modal="true" aria-label={event.title}>
       <div className="structural-modal-topline">
         <span><AlertTriangle size={15} /> THIS CHANGES THE SPECIMEN</span>
-        <button type="button" onClick={onCancel} disabled={busy} aria-label="Not now">
+        <button type="button" onClick={onCancel} disabled={busy} aria-label="Close decision">
           <X size={17} />
         </button>
       </div>
