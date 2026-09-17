@@ -75,6 +75,15 @@ const specimenStateSummary = (specimen: Specimen): string => [
   `Checkpoints: ${specimen.checkpoints.length}`,
 ].join('\n');
 
+const userFacingTransportError = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  const separator = raw.indexOf(':');
+  const detail = separator > 0 && /^[A-Z0-9_]+$/.test(raw.slice(0, separator))
+    ? raw.slice(separator + 1)
+    : raw;
+  return detail.trim();
+};
+
 const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
   specimen,
   onChange,
@@ -184,7 +193,12 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     } catch (error: any) {
       if (error?.name === 'AbortError') return;
       setFailedTurn({ userMessage, attachments: rawAttachments });
-      setTransmissionError('That turn failed without changing the genome. You can retry it.');
+      const detail = userFacingTransportError(error);
+      setTransmissionError(
+        detail
+          ? `That turn failed without changing the genome. ${detail}`
+          : 'That turn failed without changing the genome. You can retry it.',
+      );
     } finally {
       abortRef.current = null;
       setIsProcessing(false);
