@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Search, Sparkles } from 'lucide-react';
 import { GenomeComponent, GenomeMode } from '../types';
+import './PartPicker.css';
 
 interface PartPickerProps {
   library: GenomeComponent[];
