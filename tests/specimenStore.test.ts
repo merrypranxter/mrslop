@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Genome, GenomeComponent } from '../types';
+import { Genome, GenomeComponent, Role } from '../types';
 
 const storageMocks = vi.hoisted(() => {
   const storage = new Map<string, unknown>();
@@ -152,7 +152,7 @@ describe('specimenStore', () => {
         createdAt: 3,
       }],
       infections: [],
-      messages: [{ id: 'm-later', role: 'user' as const, content: 'do not lose me', timestamp: 5 }],
+      messages: [{ id: 'm-later', role: Role.USER, content: 'do not lose me', timestamp: 5 }],
       artifacts: [{
         id: 'a-later',
         specimenId: original.id,
