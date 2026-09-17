@@ -1,6 +1,6 @@
 {
   "name": "Mr. Slop",
-  "description": "AI slop shiiii",
+  "description": "A conversation-first experimental creature builder powered by modular AI SLOP genomes.",
   "requestFramePermissions": [
     "microphone"
   ]
