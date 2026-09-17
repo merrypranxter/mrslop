@@ -65,23 +65,95 @@ export interface Artifact {
   createdAt: number;
 }
 
-export interface Checkpoint {
-  id: string;
-  reason: string;
-  genome: Genome;
-  createdAt: number;
+export type InfectionStatus = 'active' | 'expired' | 'removed' | 'promoted';
+export type InfectionDurationMode = 'turns' | 'indefinite';
+export type MutationSourceType = 'user' | 'mr-slop' | 'artifact' | 'conversation' | 'mutation-proposal';
+
+export interface MutationProvenance {
+  specimenId: string;
+  genomeId: string;
+  sourceType: MutationSourceType;
+  sourceMessageIds: string[];
+  sourceArtifactIds: string[];
 }
+
+export interface Infection {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  status: InfectionStatus;
+  durationMode: InfectionDurationMode;
+  durationTurns?: number;
+  remainingTurns?: number;
+  provenance: MutationProvenance;
+  createdAt: number;
+  endedAt?: number;
+  endReason?: string;
+}
+
+export type TraitStatus = 'active' | 'retired';
+export type TraitOriginType = 'explicit' | 'promoted-infection' | 'fossilized-accident' | 'mr-slop-proposal';
 
 export interface AcquiredTrait {
   id: string;
   name: string;
   description: string;
-  prompt?: string;
+  prompt: string;
+  status: TraitStatus;
+  originType: TraitOriginType;
+  provenance: MutationProvenance;
+  createdAt: number;
+  retiredAt?: number;
+}
+
+export type LifeHistoryEventType =
+  | 'specimen-born'
+  | 'genome-mutated'
+  | 'infection-started'
+  | 'infection-expired'
+  | 'infection-removed'
+  | 'infection-promoted'
+  | 'trait-acquired'
+  | 'trait-retired'
+  | 'accident-fossilized'
+  | 'checkpoint-restored';
+
+export interface LifeHistoryEvent {
+  id: string;
+  type: LifeHistoryEventType;
+  summary: string;
+  mutationId?: string;
+  checkpointId?: string;
+  messageIds: string[];
+  artifactIds: string[];
+  createdAt: number;
+}
+
+export interface MutationProposal {
+  id: string;
+  kind: 'infection' | 'trait' | 'fossilized-accident';
+  name: string;
+  description: string;
+  prompt: string;
+  reason: string;
+  recommendedTurns?: number;
+  sourceMessageIds: string[];
+  sourceArtifactIds: string[];
+  sourceType: MutationSourceType;
+}
+
+export interface Checkpoint {
+  id: string;
+  reason: string;
+  genome: Genome;
+  acquiredTraits: AcquiredTrait[];
+  infections: Infection[];
   createdAt: number;
 }
 
 export interface Specimen {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   name: string;
   phase: SpecimenPhase;
@@ -91,6 +163,8 @@ export interface Specimen {
   artifacts: Artifact[];
   checkpoints: Checkpoint[];
   acquiredTraits: AcquiredTrait[];
+  infections: Infection[];
+  lifeHistory: LifeHistoryEvent[];
   scars: unknown[];
   trajectory: unknown | null;
   controllerState: unknown | null;
