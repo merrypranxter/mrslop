@@ -1,0 +1,7 @@
+{
+  "name": "Mr. Slop",
+  "description": "AI slop shiiii",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
