@@ -1,4 +1,3 @@
-import { GenerateContentResponse, GoogleGenAI } from '@google/genai';
 import {
   Attachment,
   ChoiceCardEvent,
@@ -11,7 +10,6 @@ import { readFileAsBase64 } from './fileService';
 
 export const MR_SLOP_MODEL = 'gemini-3-flash-preview';
 
-const MAX_RETRIES = 3;
 const MAX_HISTORY_MESSAGES = 10;
 const MAX_MESSAGE_CHARS = 100_000;
 const MAX_TEXT_ATTACHMENT_CHARS = 500_000;
@@ -28,14 +26,6 @@ or
 Optional proposedGenome: {"componentIds":["existing-catalog-id"],"mode":"stack|fuse","customSeed":"optional"}
 Do not claim an optional event was applied. The application/user must approve structural changes.
 `.trim();
-
-export const getGeminiClient = (): GoogleGenAI => {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined') {
-    throw new Error('API_KEY_MISSING: No valid Gemini API key detected in environment.');
-  }
-  return new GoogleGenAI({ apiKey });
-};
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(item => typeof item === 'string');
@@ -132,6 +122,13 @@ export interface SendMrSlopArgs {
   signal?: AbortSignal;
 }
 
+interface ServerGenerationResponse {
+  text?: string;
+  finishReason?: string;
+  error?: string;
+  code?: string;
+}
+
 const truncate = (value: string, max: number): string =>
   value.length <= max ? value : `${value.slice(0, max)}\n\n[TRUNCATED_FOR_CONTEXT_SIZE]`;
 
@@ -158,31 +155,32 @@ const buildCurrentParts = async (attachments: Attachment[], userMessage: string)
   return parts;
 };
 
-const errorDetails = (error: any): { message: string; code: unknown; status: string } => {
-  const nested = error?.response || error?.error || error || {};
-  return {
-    message: nested.message || error?.message || 'UNKNOWN_ERROR',
-    code: nested.code || 0,
-    status: nested.status || '',
-  };
-};
+export const postMrSlopServer = async <T extends ServerGenerationResponse>(
+  endpoint: string,
+  payload: unknown,
+  signal?: AbortSignal,
+): Promise<T> => {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
 
-const isRetryable = (details: { message: string; code: unknown; status: string }): boolean =>
-  details.code === 429 ||
-  details.code === 503 ||
-  details.status === 'RESOURCE_EXHAUSTED' ||
-  details.status === 'UNAVAILABLE' ||
-  /429|503|quota|RESOURCE_EXHAUSTED|UNAVAILABLE/i.test(details.message);
-
-const delay = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
-  const timer = setTimeout(resolve, ms);
-  if (signal) {
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer);
-      reject(new DOMException('Aborted', 'AbortError'));
-    }, { once: true });
+  let data: ServerGenerationResponse = {};
+  try {
+    data = await response.json() as ServerGenerationResponse;
+  } catch {
+    data = { error: `Server returned HTTP ${response.status} without a JSON response.` };
   }
-});
+
+  if (!response.ok) {
+    const code = data.code || `HTTP_${response.status}`;
+    throw new Error(`${code}:${data.error || response.statusText || 'Mr. Slop server request failed.'}`);
+  }
+
+  return data as T;
+};
 
 export const sendMrSlopMessage = async ({
   history,
@@ -209,54 +207,41 @@ export const sendMrSlopMessage = async ({
   }));
   contents.push({ role: 'user', parts: await buildCurrentParts(attachments, userMessage) });
 
-  const payloadBytes = JSON.stringify(contents).length + systemInstruction.length;
+  const fullSystemInstruction = `${systemInstruction}\n\n${RESPONSE_ENVELOPE_CONTRACT}`;
+  const payloadBytes = JSON.stringify(contents).length + fullSystemInstruction.length;
   if (payloadBytes > MAX_PAYLOAD_BYTES) {
-    throw new Error('MR_SLOP_PAYLOAD_TOO_LARGE');
+    throw new Error('MR_SLOP_PAYLOAD_TOO_LARGE:Reduce attachments or conversation size and try again.');
   }
 
-  const ai = getGeminiClient();
-  let attempt = 0;
-
-  while (true) {
-    if (signal?.aborted) return { text: 'Stopped.' };
-    try {
-      const response: GenerateContentResponse = await ai.models.generateContent({
+  try {
+    const result = await postMrSlopServer<ServerGenerationResponse>(
+      '/api/mr-slop/chat',
+      {
         model: MR_SLOP_MODEL,
         contents,
-        config: {
-          systemInstruction: `${systemInstruction}\n\n${RESPONSE_ENVELOPE_CONTRACT}`,
-          temperature: 0.9,
-          maxOutputTokens: 8192,
-        },
-      });
+        systemInstruction: fullSystemInstruction,
+        temperature: 0.9,
+        maxOutputTokens: 8192,
+      },
+      signal,
+    );
 
-      if (response.text?.trim()) return parseMrSlopEnvelope(response.text);
+    if (result.text?.trim()) return parseMrSlopEnvelope(result.text);
 
-      const reason = response.candidates?.[0]?.finishReason;
-      return {
-        text: reason
-          ? `Mr. Slop did not get a usable response back. Finish reason: ${reason}.`
-          : 'Mr. Slop got an empty response. Try that turn again.',
-      };
-    } catch (error: any) {
-      if (error?.name === 'AbortError' || signal?.aborted) return { text: 'Stopped.' };
-      const details = errorDetails(error);
-      if (isRetryable(details) && attempt < MAX_RETRIES) {
-        attempt += 1;
-        await delay((2 ** attempt) * 500 + Math.random() * 250, signal);
-        continue;
-      }
-      if (/API_KEY_MISSING|API_KEY_INVALID|Requested entity was not found/i.test(details.message)) {
-        throw new Error('MR_SLOP_API_KEY_INVALID');
-      }
-      throw new Error(`MR_SLOP_TRANSMISSION_FAILED:${details.message}`);
-    }
+    return {
+      text: result.finishReason
+        ? `Mr. Slop did not get a usable response back. Finish reason: ${result.finishReason}.`
+        : 'Mr. Slop got an empty response. Try that turn again.',
+    };
+  } catch (error: any) {
+    if (error?.name === 'AbortError' || signal?.aborted) return { text: 'Stopped.' };
+    throw error;
   }
 };
 
 /**
  * Temporary compile-time bridge for the Ghost-derived Terminal component.
- * App.tsx no longer renders that component; Task 7 removes it entirely.
+ * App.tsx no longer renders that component; final cleanup removes it entirely.
  */
 export const sendMessageToGemini = async (
   history: Message[],
