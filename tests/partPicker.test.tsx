@@ -115,7 +115,7 @@ describe('PartPicker', () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(screen.getByText(/42,000 chars/i)).toBeInTheDocument();
+    expect(screen.getByText('42,000')).toBeInTheDocument();
     expect(screen.getByText(/large kernel/i)).toBeInTheDocument();
   });
 });
