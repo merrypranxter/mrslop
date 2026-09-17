@@ -135,15 +135,6 @@ export interface MrSlopResponseEnvelope {
   };
 }
 
-// Legacy compatibility while the Ghost-derived terminal is replaced in later Round 1 tasks.
-export interface Session {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: number;
-  lastModified: number;
-}
-
 export enum VisualType {
   STARS = 'stars',
   MATRIX = 'matrix',
