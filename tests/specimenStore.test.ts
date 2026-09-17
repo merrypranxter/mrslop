@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Genome, GenomeComponent } from '../types';
 
-const storage = new Map<string, unknown>();
-const getItem = vi.fn(async (key: string) => storage.get(key) ?? null);
-const setItem = vi.fn(async (key: string, value: unknown) => {
-  storage.set(key, value);
-  return value;
+const storageMocks = vi.hoisted(() => {
+  const storage = new Map<string, unknown>();
+  const getItem = vi.fn(async (key: string) => storage.get(key) ?? null);
+  const setItem = vi.fn(async (key: string, value: unknown) => {
+    storage.set(key, value);
+    return value;
+  });
+  return { storage, getItem, setItem };
 });
 
 vi.mock('localforage', () => ({
-  default: { getItem, setItem },
+  default: {
+    getItem: storageMocks.getItem,
+    setItem: storageMocks.setItem,
+  },
 }));
 
 import {
@@ -42,9 +48,9 @@ const genome: Genome = {
 
 describe('specimenStore', () => {
   beforeEach(() => {
-    storage.clear();
-    getItem.mockClear();
-    setItem.mockClear();
+    storageMocks.storage.clear();
+    storageMocks.getItem.mockClear();
+    storageMocks.setItem.mockClear();
   });
 
   it('uses a Mr. Slop-specific storage key', () => {
@@ -80,22 +86,22 @@ describe('specimenStore', () => {
   it('saves and loads specimens only under the Mr. Slop key', async () => {
     const specimen = makeSpecimen(genome);
     await saveSpecimens([specimen]);
-    expect(setItem).toHaveBeenCalledWith(MR_SLOP_STORAGE_KEY, [specimen]);
+    expect(storageMocks.setItem).toHaveBeenCalledWith(MR_SLOP_STORAGE_KEY, [specimen]);
 
     const loaded = await loadSpecimens();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].id).toBe(specimen.id);
-    expect(getItem).toHaveBeenCalledWith(MR_SLOP_STORAGE_KEY);
-    expect(getItem).not.toHaveBeenCalledWith('ghost_sessions');
+    expect(storageMocks.getItem).toHaveBeenCalledWith(MR_SLOP_STORAGE_KEY);
+    expect(storageMocks.getItem).not.toHaveBeenCalledWith('ghost_sessions');
   });
 
   it('returns an empty list for missing or corrupt stored data', async () => {
     expect(await loadSpecimens()).toEqual([]);
 
-    storage.set(MR_SLOP_STORAGE_KEY, { not: 'an array' });
+    storageMocks.storage.set(MR_SLOP_STORAGE_KEY, { not: 'an array' });
     expect(await loadSpecimens()).toEqual([]);
 
-    storage.set(MR_SLOP_STORAGE_KEY, [{ schemaVersion: 999 }]);
+    storageMocks.storage.set(MR_SLOP_STORAGE_KEY, [{ schemaVersion: 999 }]);
     expect(await loadSpecimens()).toEqual([]);
   });
 });
