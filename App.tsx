@@ -1,40 +1,33 @@
-import React from 'react';
-import Terminal from './components/Terminal';
+import React, { useState } from 'react';
+import BuildMeScreen, { BuildRoute } from './components/BuildMeScreen';
+
+const ROUTE_LABELS: Record<BuildRoute, string> = {
+  surprise: 'SURPRISE ME',
+  idea: 'I HAVE AN IDEA',
+  parts: 'LET ME PICK THE PARTS',
+  specimen: 'START FROM A SPECIMEN',
+};
 
 function App() {
+  const [selectedRoute, setSelectedRoute] = useState<BuildRoute | null>(null);
+
   return (
-    <div className="relative min-h-[100dvh] bg-black text-green-500 font-['Courier_Prime'] overflow-x-hidden selection:bg-green-500 selection:text-black w-full">
-      
-      {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#0a2a0a_0%,_#000000_90%)] z-0"></div>
-      
-      {/* Grid Overlay */}
-      <div className="absolute inset-0 z-0 opacity-10 pointer-events-none"
-           style={{
-             backgroundImage: 'linear-gradient(#0f0 1px, transparent 1px), linear-gradient(90deg, #0f0 1px, transparent 1px)',
-             backgroundSize: '40px 40px'
-           }}>
-      </div>
+    <div className="mr-slop-app selection:bg-fuchsia-400 selection:text-black">
+      <div className="slop-noise" aria-hidden="true" />
+      <div className="slop-scanlines" aria-hidden="true" />
+      <div className="slop-vignette" aria-hidden="true" />
 
-      {/* Main Content */}
-      <main className="relative z-10 h-[100dvh] flex items-center justify-center p-0 md:p-6 lg:p-10 w-full overflow-hidden">
-        <Terminal />
+      <main className="mr-slop-main safe-top safe-bottom safe-left safe-right">
+        <BuildMeScreen specimenCount={0} onChoose={setSelectedRoute} />
+
+        {selectedRoute && (
+          <div className="route-selection-toast" role="status">
+            <span>ROUTE SELECTED</span>
+            <strong>{ROUTE_LABELS[selectedRoute]}</strong>
+            <small>Conversation handoff is the next wiring pass.</small>
+          </div>
+        )}
       </main>
-
-      {/* CRT Effects Layer (Global Overlay) */}
-      <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden h-[100dvh] w-full">
-         <div className="scan-line absolute top-0 left-0 w-full h-full"></div>
-         <div className="crt-overlay absolute top-0 left-0 w-full h-full opacity-30 md:opacity-60"></div>
-         {/* Vignette */}
-         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.4)_100%)]"></div>
-      </div>
-      
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
-        }
-      `}</style>
     </div>
   );
 }
