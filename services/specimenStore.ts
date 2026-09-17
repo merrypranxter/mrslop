@@ -1,5 +1,5 @@
 import localforage from 'localforage';
-import { Genome, Specimen, SpecimenPhase } from '../types';
+import { Artifact, Genome, Specimen, SpecimenPhase } from '../types';
 
 export const MR_SLOP_STORAGE_KEY = 'mrslop_specimens_v1';
 
@@ -100,6 +100,36 @@ export const checkpointSpecimen = (specimen: Specimen, reason: string): Specimen
   ],
   lastModified: Date.now(),
 });
+
+export interface SaveArtifactInput {
+  messageId?: string;
+  kind: Artifact['kind'];
+  title: string;
+  content: string;
+}
+
+export const saveArtifact = (specimen: Specimen, input: SaveArtifactInput): Specimen => {
+  const artifact: Artifact = {
+    id: crypto.randomUUID(),
+    specimenId: specimen.id,
+    messageId: input.messageId,
+    kind: input.kind,
+    title: input.title.trim() || 'Saved artifact',
+    content: input.content,
+    genomeId: specimen.currentGenome.id,
+    componentIds: specimen.currentGenome.components
+      .filter(component => component.enabled)
+      .sort((a, b) => a.order - b.order)
+      .map(component => component.id),
+    createdAt: Date.now(),
+  };
+
+  return {
+    ...specimen,
+    artifacts: [...specimen.artifacts, artifact],
+    lastModified: Date.now(),
+  };
+};
 
 export const replaceCurrentGenome = (
   specimen: Specimen,
