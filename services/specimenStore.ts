@@ -187,10 +187,12 @@ const isCheckpointV2 = (value: unknown): value is Checkpoint => {
 
 const isValidV2Specimen = (value: unknown): value is Specimen => {
   if (!isRecord(value) || value.schemaVersion !== 2 || !hasBaseSpecimenShape(value)) return false;
-  return Array.isArray(value.infections) &&
-    value.infections.every(isInfection) &&
+  if (!Array.isArray(value.infections) ||
+      !Array.isArray(value.acquiredTraits) ||
+      !Array.isArray(value.lifeHistory) ||
+      !Array.isArray(value.checkpoints)) return false;
+  return value.infections.every(isInfection) &&
     value.acquiredTraits.every(isAcquiredTrait) &&
-    Array.isArray(value.lifeHistory) &&
     value.lifeHistory.every(isLifeHistoryEvent) &&
     value.checkpoints.every(isCheckpointV2);
 };
@@ -214,6 +216,7 @@ const isLegacyCheckpoint = (value: unknown): value is LegacyCheckpoint => {
 
 const isValidLegacyV1Specimen = (value: unknown): value is LegacyV1Specimen => {
   if (!isRecord(value) || value.schemaVersion !== 1 || !hasBaseSpecimenShape(value)) return false;
+  if (!Array.isArray(value.acquiredTraits) || !Array.isArray(value.checkpoints)) return false;
   return value.acquiredTraits.every(isLegacyTrait) && value.checkpoints.every(isLegacyCheckpoint);
 };
 
