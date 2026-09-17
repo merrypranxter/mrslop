@@ -33,7 +33,8 @@ describe('AI Studio server transport', () => {
       expect(input).toBe('/api/mr-slop/chat');
       expect(init?.method).toBe('POST');
       const body = JSON.parse(String(init?.body));
-      expect(body.systemInstruction).toBe('SYSTEM');
+      expect(body.systemInstruction).toContain('SYSTEM');
+      expect(body.systemInstruction).toContain('RESPONSE FORMAT');
       expect(body.contents.at(-1).parts.at(-1).text).toBe('hello');
       return new Response(JSON.stringify({ text: '{"text":"hello from server"}' }), {
         status: 200,
