@@ -65,7 +65,9 @@ describe('mutation state engine', () => {
     expect(advanced.infections[0].status).toBe('expired');
     expect(advanced.infections[0].remainingTurns).toBe(0);
     expect(advanced.infections[0].endedAt).toEqual(expect.any(Number));
-    expect(advanced.lifeHistory.at(-1)?.type).toBe('infection-expired');
+    expect(advanced.lifeHistory.some(event => event.type === 'infection-expired')).toBe(true);
+    expect(advanced.lifeHistory.at(-1)?.type).toBe('scar-acquired');
+    expect(advanced.scars.some(scar => scar.kind === 'infection-survived')).toBe(true);
     expect(infected.infections[0].status).toBe('active');
   });
 
@@ -163,10 +165,12 @@ describe('mutation state engine', () => {
     expect(next.infections[0].endedAt).toEqual(expect.any(Number));
     expect(next.acquiredTraits[0].originType).toBe('promoted-infection');
     expect(next.acquiredTraits[0].prompt).toBe(infected.infections[0].prompt);
-    expect(next.lifeHistory.map(event => event.type).slice(-2)).toEqual([
+    expect(next.lifeHistory.map(event => event.type).slice(-3)).toEqual([
       'infection-promoted',
       'trait-acquired',
+      'scar-acquired',
     ]);
+    expect(next.scars.some(scar => scar.kind === 'infection-promoted')).toBe(true);
   });
 
   it('fossilizes an observed accident with its source evidence', () => {
@@ -188,10 +192,12 @@ describe('mutation state engine', () => {
     });
     expect(next.acquiredTraits[0].provenance.sourceMessageIds).toEqual(['m7', 'm8']);
     expect(next.acquiredTraits[0].provenance.sourceArtifactIds).toEqual(['a2']);
-    expect(next.lifeHistory.map(event => event.type).slice(-2)).toEqual([
+    expect(next.lifeHistory.map(event => event.type).slice(-3)).toEqual([
       'accident-fossilized',
       'trait-acquired',
+      'scar-acquired',
     ]);
+    expect(next.scars.some(scar => scar.kind === 'fossilized-accident')).toBe(true);
   });
 
   it('returns only active infections and active traits', () => {

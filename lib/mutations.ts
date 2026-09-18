@@ -7,6 +7,11 @@ import {
   Specimen,
   TraitOriginType,
 } from '../types';
+import {
+  addFossilizationScar,
+  addInfectionSurvivedScar,
+  addPromotionScar,
+} from './scars';
 
 export type InfectionDuration =
   | { mode: 'turns'; turns: number }
@@ -203,6 +208,7 @@ export const removeInfection = (
 export const advanceSuccessfulTurn = (specimen: Specimen): Specimen => {
   const now = Date.now();
   const expiredEvents: LifeHistoryEvent[] = [];
+  const expiredRecords: Array<{ infection: Infection; event: LifeHistoryEvent }> = [];
 
   const infections = specimen.infections.map(infection => {
     if (infection.status !== 'active' || infection.durationMode !== 'turns') {
@@ -213,14 +219,14 @@ export const advanceSuccessfulTurn = (specimen: Specimen): Specimen => {
     const remainingTurns = Math.max(0, current - 1);
 
     if (remainingTurns === 0) {
-      expiredEvents.push(
-        makeHistoryEvent(
-          'infection-expired',
-          `Expired infection: ${infection.name}`,
-          infection.id,
-          infection.provenance,
-        ),
+      const event = makeHistoryEvent(
+        'infection-expired',
+        `Expired infection: ${infection.name}`,
+        infection.id,
+        infection.provenance,
       );
+      expiredEvents.push(event);
+      expiredRecords.push({ infection: cloneInfection(infection), event });
       return {
         ...cloneInfection(infection),
         status: 'expired' as const,
@@ -236,12 +242,18 @@ export const advanceSuccessfulTurn = (specimen: Specimen): Specimen => {
     };
   });
 
-  return {
+  let next: Specimen = {
     ...specimen,
     infections,
     lifeHistory: [...specimen.lifeHistory, ...expiredEvents],
     lastModified: now,
   };
+
+  for (const record of expiredRecords) {
+    next = addInfectionSurvivedScar(next, record.infection, record.event.id, now);
+  }
+
+  return next;
 };
 
 export const acquireTrait = (
@@ -332,13 +344,21 @@ export const promoteInfection = (
     trait.provenance,
   );
 
-  return {
+  const next: Specimen = {
     ...specimen,
     infections,
     acquiredTraits: [...specimen.acquiredTraits.map(cloneTrait), trait],
     lifeHistory: [...specimen.lifeHistory, promotedEvent, acquiredEvent],
     lastModified: now,
   };
+
+  return addPromotionScar(
+    next,
+    infection.id,
+    trait.id,
+    [promotedEvent.id, acquiredEvent.id],
+    now,
+  );
 };
 
 export const fossilizeAccident = (
@@ -355,7 +375,14 @@ export const fossilizeAccident = (
     trait.provenance,
   );
 
-  return appendTraitWithHistory(specimen, trait, [fossilizedEvent]);
+  const next = appendTraitWithHistory(specimen, trait, [fossilizedEvent]);
+  const acquiredEvent = next.lifeHistory[next.lifeHistory.length - 1];
+
+  return addFossilizationScar(
+    next,
+    trait.id,
+    [fossilizedEvent.id, acquiredEvent.id],
+  );
 };
 
 export const activeInfections = (specimen: Specimen): Infection[] =>

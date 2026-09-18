@@ -226,7 +226,8 @@ describe('Round 2A mutation acceptance', () => {
 
     await waitFor(() => {
       expect(latest.acquiredTraits).toHaveLength(0);
-      expect(latest.lifeHistory.at(-1)?.type).toBe('checkpoint-restored');
+      expect(latest.lifeHistory.some(event => event.type === 'checkpoint-restored')).toBe(true);
+      expect(latest.scars.some(scar => scar.kind === 'checkpoint-reversion')).toBe(true);
     });
 
     expect(latest.messages.length).toBeGreaterThan(messageCountBeforeReload);

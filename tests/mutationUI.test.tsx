@@ -158,7 +158,9 @@ describe('Mr. Slop mutation UI and lifecycle', () => {
     await waitFor(() => {
       const next = latestSpecimen(onChange);
       expect(next.infections[0]).toMatchObject({ status: 'expired', remainingTurns: 0 });
-      expect(next.lifeHistory.at(-1)?.type).toBe('infection-expired');
+      expect(next.lifeHistory.some(event => event.type === 'infection-expired')).toBe(true);
+      expect(next.lifeHistory.at(-1)?.type).toBe('scar-acquired');
+      expect(next.scars.some(scar => scar.kind === 'infection-survived')).toBe(true);
     });
   });
 
@@ -271,8 +273,48 @@ describe('Mr. Slop mutation UI and lifecycle', () => {
     await waitFor(() => {
       const next = latestSpecimen(onChange);
       expect(next.infections).toEqual([]);
-      expect(next.lifeHistory.at(-1)?.type).toBe('checkpoint-restored');
+      expect(next.lifeHistory.some(event => event.type === 'checkpoint-restored')).toBe(true);
+      expect(next.scars.some(scar => scar.kind === 'checkpoint-reversion')).toBe(true);
       expect(next.checkpoints.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('records a genome mutation event and scar after an approved genome replacement', async () => {
+    modelMocks.send.mockResolvedValue({
+      text: 'I found a different mechanism set.',
+      uiEvent: {
+        type: 'choice-card',
+        id: 'genome-choice',
+        title: 'TRY A DIFFERENT BRAIN?',
+        options: [{
+          id: 'swap-brain',
+          label: 'SWAP BRAIN',
+          description: 'Install a different canonical mechanism.',
+          componentIds: ['tm-02'],
+          mode: 'stack',
+        }],
+      },
+    });
+    const specimen = spawnedSpecimen();
+    const oldGenomeId = specimen.currentGenome.id;
+    const onChange = vi.fn();
+    render(<MrSlopTerminal specimen={specimen} onChange={onChange} />);
+
+    sendText('change your genome');
+
+    fireEvent.click(await screen.findByRole('button', { name: /swap brain/i }));
+    await screen.findByText(/this changes the genome/i);
+    fireEvent.click(screen.getByRole('button', { name: /swap brain/i }));
+
+    await waitFor(() => {
+      const next = latestSpecimen(onChange);
+      expect(next.currentGenome.id).not.toBe(oldGenomeId);
+      expect(next.currentGenome.components.map(component => component.id)).toContain('tm-02');
+      expect(next.lifeHistory.some(event => event.type === 'genome-mutated')).toBe(true);
+      expect(next.scars).toContainEqual(expect.objectContaining({
+        kind: 'genome-change',
+        origin: 'experienced',
+      }));
     });
   });
 

@@ -172,10 +172,11 @@ describe('specimenStore', () => {
     expect(restored.infections).toEqual(original.infections);
     expect(restored.messages).toEqual(changed.messages);
     expect(restored.artifacts).toEqual(changed.artifacts);
-    expect(restored.lifeHistory.at(-1)).toMatchObject({
+    expect(restored.lifeHistory).toContainEqual(expect.objectContaining({
       type: 'checkpoint-restored',
       checkpointId,
-    });
+    }));
+    expect(restored.scars.some(scar => scar.kind === 'checkpoint-reversion')).toBe(true);
   });
 
   it('saves and loads specimens only under the Mr. Slop key', async () => {

@@ -1,4 +1,5 @@
 import localforage from 'localforage';
+import { addCheckpointReversionScar } from '../lib/scars';
 import {
   AcquiredTrait,
   Artifact,
@@ -582,21 +583,31 @@ export const restoreCheckpoint = (specimen: Specimen, checkpointId: string): Spe
   const checkpoint = specimen.checkpoints.find(item => item.id === checkpointId);
   if (!checkpoint) throw new Error('CHECKPOINT_NOT_FOUND');
 
-  return {
+  const restoredEvent = makeHistoryEvent(
+    'checkpoint-restored',
+    `Restored checkpoint: ${checkpoint.reason}`,
+    { checkpointId: checkpoint.id },
+  );
+
+  const restored: Specimen = {
     ...specimen,
     currentGenome: cloneGenomeSnapshot(checkpoint.genome),
     acquiredTraits: cloneTraits(checkpoint.acquiredTraits),
     infections: cloneInfections(checkpoint.infections),
     lifeHistory: [
       ...cloneLifeHistory(specimen.lifeHistory),
-      makeHistoryEvent(
-        'checkpoint-restored',
-        `Restored checkpoint: ${checkpoint.reason}`,
-        { checkpointId: checkpoint.id },
-      ),
+      restoredEvent,
     ],
-    lastModified: Date.now(),
+    lastModified: restoredEvent.createdAt,
   };
+
+  return addCheckpointReversionScar(
+    specimen,
+    restored,
+    checkpoint.id,
+    restoredEvent.id,
+    restoredEvent.createdAt,
+  );
 };
 
 export interface SaveArtifactInput {
