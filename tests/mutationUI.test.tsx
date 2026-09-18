@@ -217,7 +217,8 @@ describe('Mr. Slop mutation UI and lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /keep metric vertigo as trait/i }));
 
     await screen.findByText(/this changes the specimen/i);
-    expect(latestSpecimen(onChange).acquiredTraits).toHaveLength(0);
+    expect(specimen.acquiredTraits).toHaveLength(0);
+    expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /keep as trait/i }));
 
     await waitFor(() => {
