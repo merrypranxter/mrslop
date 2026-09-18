@@ -1,9 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import BuildMeScreen, { BuildRoute } from './components/BuildMeScreen';
+import BreedingPicker from './components/BreedingPicker';
+import BreedingPreviewCard from './components/BreedingPreviewCard';
+import BreedingResultCard from './components/BreedingResultCard';
 import MrSlopTerminal from './components/MrSlopTerminal';
 import PartPicker from './components/PartPicker';
 import SpecimenSidebar from './components/SpecimenSidebar';
 import { SLOP_LIBRARY } from './data/slopLibrary';
+import { createBreedingPreview } from './lib/breeding';
+import type { BreedingPreview } from './lib/breeding';
+import { commitBreedingPreview } from './lib/breedingPersistence';
 import { createGenome, selectSurpriseComponents } from './lib/genome';
 import { forkSpecimen, nextForkName } from './lib/lineage';
 import { compileFuseGenome, MR_SLOP_FUSE_VERSION } from './services/kernelCompiler';
@@ -22,6 +28,11 @@ function App() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showBreeding, setShowBreeding] = useState(false);
+  const [breedingPreview, setBreedingPreview] = useState<BreedingPreview | null>(null);
+  const [breedingResult, setBreedingResult] = useState<Specimen | null>(null);
+  const [breedingError, setBreedingError] = useState<string | null>(null);
+  const [isSavingBreeding, setIsSavingBreeding] = useState(false);
 
   useEffect(() => {
     void loadSpecimens().then(loaded => {
@@ -142,6 +153,81 @@ function App() {
     return child;
   };
 
+
+  const openBreeding = () => {
+    setBreedingPreview(null);
+    setBreedingResult(null);
+    setBreedingError(null);
+    setAppError(null);
+    setShowBreeding(true);
+  };
+
+  const previewBreeding = (parentA: Specimen, parentB: Specimen) => {
+    const currentA = specimensRef.current.find(item => item.id === parentA.id);
+    const currentB = specimensRef.current.find(item => item.id === parentB.id);
+
+    if (!currentA || !currentB) {
+      setAppError('One of those specimens disappeared before the breeding preview could be built.');
+      return;
+    }
+
+    try {
+      const preview = createBreedingPreview(currentA, currentB, {
+        library: SLOP_LIBRARY,
+      });
+      setBreedingError(null);
+      setBreedingPreview(preview);
+    } catch {
+      setAppError('Mr. Slop could not build that offspring preview.');
+    }
+  };
+
+  const approveBreeding = async () => {
+    if (!breedingPreview || isSavingBreeding) return;
+
+    setIsSavingBreeding(true);
+    setBreedingError(null);
+    setAppError(null);
+
+    try {
+      const result = await commitBreedingPreview(
+        specimensRef.current,
+        breedingPreview,
+        { save: saveSpecimens },
+      );
+
+      specimensRef.current = result.specimens;
+      setSpecimens(result.specimens);
+
+      if (activeSpecimen) {
+        const currentActive = result.specimens.find(item => item.id === activeSpecimen.id);
+        if (currentActive) setActiveSpecimen(currentActive);
+      }
+
+      setBreedingPreview(null);
+      setShowBreeding(false);
+      setBreedingResult(result.child);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : String(error);
+      if (code === 'BREEDING_PREVIEW_STALE') {
+        setBreedingPreview(null);
+        setBreedingError(null);
+        setAppError('That breeding preview went stale because a parent changed. Preview the current parents again.');
+      } else {
+        setBreedingError('Offspring could not be saved. The parents and preview remain unchanged; retry or cancel.');
+      }
+    } finally {
+      setIsSavingBreeding(false);
+    }
+  };
+
+  const closeBreeding = () => {
+    if (isSavingBreeding) return;
+    setShowBreeding(false);
+    setBreedingPreview(null);
+    setBreedingError(null);
+  };
+
   const openSpecimen = (specimen: Specimen) => {
     setActiveSpecimen(specimen);
     setScreen('chat');
@@ -201,6 +287,11 @@ function App() {
             onChange={persistSpecimen}
             onOpenSpecimens={() => setShowSpecimens(true)}
             onNewSpecimen={startAnother}
+            onBreedSpecimen={
+              specimens.filter(item => item.phase === 'spawned').length >= 2
+                ? openBreeding
+                : undefined
+            }
             onForkSpecimen={persistFork}
             onOpenSpecimen={openSpecimen}
             specimenNames={specimenNames}
@@ -217,6 +308,17 @@ function App() {
           </div>
         )}
 
+        {breedingResult && (
+          <BreedingResultCard
+            child={breedingResult}
+            onOpenChild={() => {
+              openSpecimen(breedingResult);
+              setBreedingResult(null);
+            }}
+            onStay={() => setBreedingResult(null)}
+          />
+        )}
+
         {appError && (
           <div className="app-error-pop" role="alert">
             <strong>MR. SLOP HIT SOMETHING</strong>
@@ -225,6 +327,26 @@ function App() {
           </div>
         )}
       </main>
+
+      {showBreeding && !breedingPreview && (
+        <BreedingPicker
+          specimens={specimens}
+          initialParentAId={activeSpecimen?.id}
+          onPreview={previewBreeding}
+          onCancel={closeBreeding}
+        />
+      )}
+
+      {showBreeding && breedingPreview && (
+        <BreedingPreviewCard
+          preview={breedingPreview}
+          specimenNames={specimenNames}
+          onApprove={() => void approveBreeding()}
+          onCancel={closeBreeding}
+          error={breedingError}
+          isSaving={isSavingBreeding}
+        />
+      )}
 
       {showSpecimens && (
         <SpecimenSidebar
