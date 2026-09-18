@@ -1,5 +1,6 @@
 import React from 'react';
 import { Beaker, Plus, Trash2, X } from 'lucide-react';
+import { calculateDrift } from '../lib/drift';
 import { Specimen } from '../types';
 import './ConversationUI.css';
 
@@ -53,6 +54,9 @@ const SpecimenSidebar: React.FC<SpecimenSidebarProps> = ({
                 <span>
                   {specimen.phase.toUpperCase()} · {specimen.currentGenome.mode.toUpperCase()} · {specimen.currentGenome.components.length} PARTS
                 </span>
+                <small>
+                  GEN {specimen.lineage.generation} · {calculateDrift(specimen).band} DRIFT
+                </small>
                 <small>{formatTime(specimen.lastModified)}</small>
               </button>
               <button
