@@ -275,6 +275,12 @@ export interface StructuralDecisionEvent {
   options: ChoiceCardOption[];
 }
 
+export interface ForkActionRequest {
+  type: 'fork-specimen';
+  suggestedName?: string;
+  reason: string;
+}
+
 export interface MrSlopResponseEnvelope {
   text: string;
   uiEvent?: ChoiceCardEvent | StructuralDecisionEvent;
@@ -285,6 +291,7 @@ export interface MrSlopResponseEnvelope {
   };
   mutationProposal?: MutationProposal;
   mutationAction?: MutationActionRequest;
+  forkAction?: ForkActionRequest;
 }
 
 export enum VisualType {
