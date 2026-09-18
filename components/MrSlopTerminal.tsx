@@ -4,6 +4,7 @@ import {
   BookmarkPlus,
   Download,
   Dna,
+  FlaskConical,
   FilePlus2,
   Mic,
   MicOff,
@@ -67,6 +68,7 @@ interface MrSlopTerminalProps {
   onOpenSpecimens?: () => void;
   onNewSpecimen?: () => void;
   onBreedSpecimen?: () => void;
+  onPetriDish?: () => void;
   onForkSpecimen?: (suggestedName?: string) => Promise<Specimen>;
   onOpenSpecimen?: (specimen: Specimen) => void;
   specimenNames?: Record<string, string>;
@@ -171,6 +173,7 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
   onOpenSpecimens,
   onNewSpecimen,
   onBreedSpecimen,
+  onPetriDish,
   onForkSpecimen,
   onOpenSpecimen,
   specimenNames = {},
@@ -856,6 +859,9 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           <small>{working.name} · {componentLabel}</small>
         </div>
         <div className="slop-chat-actions">
+          {onPetriDish && (
+            <button type="button" onClick={onPetriDish} aria-label="Petri Dish"><FlaskConical size={16} /></button>
+          )}
           {onBreedSpecimen && (
             <button type="button" onClick={onBreedSpecimen} aria-label="Breed specimen"><Dna size={16} /></button>
           )}

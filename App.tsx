@@ -4,6 +4,8 @@ import BreedingPicker from './components/BreedingPicker';
 import BreedingPreviewCard from './components/BreedingPreviewCard';
 import BreedingResultCard from './components/BreedingResultCard';
 import MrSlopTerminal from './components/MrSlopTerminal';
+import PetriDishRunner from './components/PetriDishRunner';
+import PetriDishSetup from './components/PetriDishSetup';
 import PartPicker from './components/PartPicker';
 import SpecimenSidebar from './components/SpecimenSidebar';
 import { SLOP_LIBRARY } from './data/slopLibrary';
@@ -12,9 +14,19 @@ import type { BreedingPreview } from './lib/breeding';
 import { commitBreedingPreview } from './lib/breedingPersistence';
 import { createGenome, selectSurpriseComponents } from './lib/genome';
 import { forkSpecimen, nextForkName } from './lib/lineage';
+import { applyPetriSelection } from './lib/petriSelection';
+import { createPetriEntrantSnapshot } from './lib/petriSnapshot';
+import {
+  createPetriTrial,
+  PETRI_EXPERIMENT_INSTRUCTION_VERSION,
+  retryPetriEntrant,
+  runPetriTrial,
+} from './lib/petriRunner';
+import { MR_SLOP_MODEL } from './services/geminiService';
 import { compileFuseGenome, MR_SLOP_FUSE_VERSION } from './services/kernelCompiler';
+import { loadPetriTrials, savePetriTrials } from './services/petriStore';
 import { loadSpecimens, makeSpecimen, saveSpecimens } from './services/specimenStore';
-import { GenomeMode, Specimen } from './types';
+import { GenomeMode, PetriTrial, Specimen } from './types';
 
 type Screen = 'build' | 'parts' | 'chat';
 
@@ -33,11 +45,20 @@ function App() {
   const [breedingResult, setBreedingResult] = useState<Specimen | null>(null);
   const [breedingError, setBreedingError] = useState<string | null>(null);
   const [isSavingBreeding, setIsSavingBreeding] = useState(false);
+  const [showPetriSetup, setShowPetriSetup] = useState(false);
+  const [activePetriTrial, setActivePetriTrial] = useState<PetriTrial | null>(null);
+  const [petriTrials, setPetriTrials] = useState<PetriTrial[]>([]);
+  const petriTrialsRef = useRef<PetriTrial[]>([]);
+  const [petriBlind, setPetriBlind] = useState(true);
+  const [isPetriRunning, setIsPetriRunning] = useState(false);
+  const petriAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    void loadSpecimens().then(loaded => {
+    void Promise.all([loadSpecimens(), loadPetriTrials()]).then(([loaded, trials]) => {
       specimensRef.current = loaded;
       setSpecimens(loaded);
+      petriTrialsRef.current = trials;
+      setPetriTrials(trials);
       setIsLoaded(true);
     });
   }, []);
@@ -151,6 +172,87 @@ function App() {
     setSpecimens(nextList);
     setActiveSpecimen(parent);
     return child;
+  };
+
+
+  const storePetriTrial = async (trial: PetriTrial) => {
+    const current = petriTrialsRef.current;
+    const exists = current.some(item => item.id === trial.id);
+    const next = exists
+      ? current.map(item => item.id === trial.id ? trial : item)
+      : [...current, trial];
+    await savePetriTrials(next);
+    petriTrialsRef.current = next;
+    setPetriTrials(next);
+  };
+
+  const openPetriDish = () => {
+    setShowPetriSetup(true);
+    setActivePetriTrial(null);
+    setPetriBlind(true);
+    setAppError(null);
+  };
+
+  const startPetriDish = async (selected: Specimen[], challenge: string) => {
+    const snapshots = selected.map(specimen => createPetriEntrantSnapshot(specimen));
+    const trial = createPetriTrial({
+      challenge,
+      entrants: snapshots,
+      config: {
+        model: MR_SLOP_MODEL,
+        temperature: 0.9,
+        maxOutputTokens: 8192,
+        experimentInstructionVersion: PETRI_EXPERIMENT_INSTRUCTION_VERSION,
+      },
+    });
+
+    const controller = new AbortController();
+    petriAbortRef.current = controller;
+    setShowPetriSetup(false);
+    setIsPetriRunning(true);
+    setActivePetriTrial({
+      ...trial,
+      status: 'running',
+      startedAt: Date.now(),
+    });
+
+    try {
+      const completed = await runPetriTrial(trial, { signal: controller.signal });
+      setActivePetriTrial(completed);
+      await storePetriTrial(completed);
+    } catch {
+      setAppError('The Petri Dish runner failed before it could preserve the trial.');
+    } finally {
+      petriAbortRef.current = null;
+      setIsPetriRunning(false);
+    }
+  };
+
+  const retryPetri = async (entrantSnapshotId: string) => {
+    if (!activePetriTrial || isPetriRunning) return;
+    setIsPetriRunning(true);
+    try {
+      const next = await retryPetriEntrant(activePetriTrial, entrantSnapshotId);
+      setActivePetriTrial(next);
+      await storePetriTrial(next);
+    } catch {
+      setAppError('That Petri entrant could not be retried.');
+    } finally {
+      setIsPetriRunning(false);
+    }
+  };
+
+  const updatePetriSelection = async (selectedIds: string[]) => {
+    if (!activePetriTrial) return;
+    const next = applyPetriSelection(activePetriTrial, selectedIds, {
+      identityMode: petriBlind ? 'blind' : 'revealed',
+    });
+    setActivePetriTrial(next);
+    try {
+      await storePetriTrial(next);
+    } catch {
+      setAppError('The Petri selection could not be saved.');
+    }
   };
 
 
@@ -292,6 +394,11 @@ function App() {
                 ? openBreeding
                 : undefined
             }
+            onPetriDish={
+              specimens.filter(item => item.phase === 'spawned').length >= 2
+                ? openPetriDish
+                : undefined
+            }
             onForkSpecimen={persistFork}
             onOpenSpecimen={openSpecimen}
             specimenNames={specimenNames}
@@ -327,6 +434,28 @@ function App() {
           </div>
         )}
       </main>
+
+      {showPetriSetup && (
+        <PetriDishSetup
+          specimens={specimens}
+          initialSpecimenId={activeSpecimen?.id}
+          onRun={(selected, challenge) => void startPetriDish(selected, challenge)}
+          onCancel={() => setShowPetriSetup(false)}
+        />
+      )}
+
+      {activePetriTrial && (
+        <PetriDishRunner
+          trial={activePetriTrial}
+          blind={petriBlind}
+          busy={isPetriRunning}
+          onToggleBlind={() => setPetriBlind(value => !value)}
+          onRetry={entrantId => void retryPetri(entrantId)}
+          onAbort={() => petriAbortRef.current?.abort()}
+          onSelectionChange={ids => void updatePetriSelection(ids)}
+          onClose={() => setActivePetriTrial(null)}
+        />
+      )}
 
       {showBreeding && !breedingPreview && (
         <BreedingPicker
