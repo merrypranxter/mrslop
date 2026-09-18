@@ -1,6 +1,7 @@
 import {
   Attachment,
   ChoiceCardEvent,
+  ForkActionRequest,
   Message,
   MrSlopResponseEnvelope,
   MutationActionRequest,
@@ -46,6 +47,17 @@ Mutation rules:
 - If the user says "try that temporarily", propose a bounded infection duration when appropriate.
 - If the user says "keep that shit", describe the concrete observed behavior to preserve and include supplied source message/artifact IDs when available.
 - If the user says "undo that shit", request remove-infection or restore-checkpoint for the likely target; if ambiguous, ask/offer a choice instead of guessing.
+
+Optional forkAction:
+{"type":"fork-specimen","suggestedName":"optional short child name","reason":"why branching now is useful"}
+
+Fork rules:
+- A fork is a new saved specimen inside the same Mr. Slop app, not a GitHub fork.
+- The parent remains unchanged by the creation request.
+- The child starts a fresh conversation and inherits only application-owned active state.
+- Do not claim the fork exists until the application confirms persistence.
+- Forking does not require another model call; return forkAction in this same response when appropriate.
+
 Do not claim an optional event was applied. The application/user must approve structural changes.
 `.trim();
 
@@ -153,6 +165,25 @@ const parseMutationAction = (value: unknown): MutationActionRequest | undefined 
   }
 };
 
+const parseForkAction = (value: unknown): ForkActionRequest | undefined => {
+  if (!isRecord(value) || value.type !== 'fork-specimen' || typeof value.reason !== 'string') {
+    return undefined;
+  }
+  if (value.suggestedName !== undefined && typeof value.suggestedName !== 'string') {
+    return undefined;
+  }
+
+  const suggestedName = typeof value.suggestedName === 'string'
+    ? value.suggestedName.trim().slice(0, 80)
+    : '';
+
+  return {
+    type: 'fork-specimen',
+    reason: value.reason,
+    ...(suggestedName ? { suggestedName } : {}),
+  };
+};
+
 const parseOption = (value: unknown) => {
   if (!isRecord(value)) return null;
   if (typeof value.id !== 'string' || typeof value.label !== 'string' || typeof value.description !== 'string') {
@@ -231,6 +262,9 @@ export const parseMrSlopEnvelope = (raw: string): MrSlopResponseEnvelope => {
 
     const mutationAction = parseMutationAction(parsed.mutationAction);
     if (mutationAction) envelope.mutationAction = mutationAction;
+
+    const forkAction = parseForkAction(parsed.forkAction);
+    if (forkAction) envelope.forkAction = forkAction;
 
     return envelope;
   } catch {
