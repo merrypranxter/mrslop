@@ -57,6 +57,13 @@ const SpecimenSidebar: React.FC<SpecimenSidebarProps> = ({
                 <small>
                   GEN {specimen.lineage.generation} · {calculateDrift(specimen).band} DRIFT
                 </small>
+                <small>
+                  {specimen.lineage.kind === 'bred'
+                    ? `BRED · ${specimen.lineage.parentSpecimenIds.length} PARENTS`
+                    : specimen.lineage.kind === 'fork'
+                      ? 'FORK · 1 PARENT'
+                      : 'ROOT'}
+                </small>
                 <small>{formatTime(specimen.lastModified)}</small>
               </button>
               <button
