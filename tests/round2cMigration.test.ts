@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { createGenome } from '../lib/genome';
-import { forkSpecimen } from '../lib/lineage';
 import { SLOP_LIBRARY } from '../data/slopLibrary';
 import { makeSpecimen, migrateSpecimen } from '../services/specimenStore';
 
@@ -14,6 +13,10 @@ const makeV3Root = () => {
   return {
     ...specimen,
     schemaVersion: 3 as const,
+    birthBaseline: {
+      ...specimen.birthBaseline,
+      source: 'native-v3' as const,
+    },
     lineage: {
       rootSpecimenId: specimen.id,
       parentSpecimenId: null,
@@ -25,17 +28,23 @@ const makeV3Root = () => {
 
 const makeV3Fork = () => {
   const root = makeV3Root();
-  const child = forkSpecimen(root as any, 'V3 FORK', 5000).child;
+  const childId = 'legacy-v3-fork';
 
   return {
-    ...child,
+    ...root,
     schemaVersion: 3 as const,
+    id: childId,
+    name: 'V3 FORK',
+    birthBaseline: {
+      ...root.birthBaseline,
+      source: 'fork-v3' as const,
+    },
     lineage: {
       rootSpecimenId: root.id,
       parentSpecimenId: root.id,
       generation: 1,
       forkedAt: 5000,
-      forkSourceEventId: child.lineage.forkSourceEventId,
+      forkSourceEventId: 'fork-event',
       forkSourceGenomeId: root.currentGenome.id,
       source: 'fork-v3' as const,
     },
