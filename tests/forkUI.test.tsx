@@ -218,6 +218,41 @@ describe('Round 2B fork UI', () => {
     });
   });
 
+  it('keeps the parent fork-history event when the user stays with the parent and keeps chatting', async () => {
+    const root = spawned('STAYING PARENT');
+    harness.loaded = [root];
+    harness.send
+      .mockResolvedValueOnce(forkEnvelope('STAYING CHILD'))
+      .mockResolvedValueOnce({ text: 'Parent timeline continues.' });
+    harness.save.mockResolvedValue(undefined);
+
+    render(<App />);
+
+    await screen.findByRole('button', { name: /build me/i });
+    fireEvent.click(screen.getByRole('button', { name: /build me/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start from a specimen/i }));
+    const parentLabel = await screen.findByText('STAYING PARENT');
+    fireEvent.click(parentLabel.closest('button')!);
+
+    sendText('fork this thing');
+    fireEvent.click(await screen.findByRole('button', { name: /create child/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /stay with parent/i }));
+
+    sendText('keep talking on the parent timeline');
+    await screen.findByText('Parent timeline continues.');
+
+    await waitFor(() => {
+      const lastSavedList = harness.save.mock.calls.at(-1)?.[0] as Specimen[];
+      expect(lastSavedList).toHaveLength(2);
+      const savedParent = lastSavedList.find(specimen => specimen.id === root.id);
+      const savedChild = lastSavedList.find(specimen => specimen.name === 'STAYING CHILD');
+
+      expect(savedChild).toBeDefined();
+      expect(savedParent?.lifeHistory.some(event => event.type === 'specimen-forked')).toBe(true);
+      expect(savedParent?.messages.some(message => message.content === 'keep talking on the parent timeline')).toBe(true);
+    });
+  });
+
   it('does not expose the child in App state until the combined specimen-list save resolves', async () => {
     const root = spawned('ATOMIC PARENT');
     harness.loaded = [root];

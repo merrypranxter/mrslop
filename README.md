@@ -87,11 +87,57 @@ Failed model turns keep the user message visible and leave genome/mutation state
 
 ## Saved specimens and artifacts
 
-Specimens are stored locally under the dedicated `mrslop_specimens_v1` storage key. The key name remains stable so existing Round 1 specimens can be found, but stored specimens now use **schema version 2**. Valid schema-v1 Mr. Slop specimens migrate locally to schema v2 with their messages, artifacts, genomes, and checkpoints preserved.
+Specimens are stored locally under the dedicated `mrslop_specimens_v1` storage key. The key name remains stable, while stored specimens now use **schema version 3**. Valid schema-v1 and schema-v2 Mr. Slop specimens migrate locally to schema v3. Existing messages, artifacts, genomes, checkpoints, mutation state, and Round 2A life history are preserved; opaque legacy scar placeholders are not converted into invented typed scars.
 
 The application does not read, migrate, or delete old Ghost session storage.
 
 A Mr. Slop reply can be saved as an artifact. Saved artifacts carry provenance back to the specimen, source message, active genome, and installed component IDs that produced them.
+
+## Round 2B lineage, forks, scars, and drift
+
+Round 2B gives specimens real application-owned lineage without turning Mr. Slop into a family-tree dashboard.
+
+### In-app specimen forks
+
+A **fork** is a new saved Mr. Slop specimen inside this application. It is **not** a GitHub repository fork.
+
+A fork is a structural action and waits for explicit approval. The parent remains a separate saved specimen. The child starts a fresh conversation and receives child-local copies of the parent's current active state:
+
+- current genome, including an already-persisted FUSE kernel;
+- active acquired traits, with new child IDs and inheritance references;
+- active temporary infections with their remaining duration, again as child-local records; and
+- existing scars as inherited historical records, plus a fork-birth ancestry scar.
+
+The child does **not** copy the parent's chat transcript, artifacts, checkpoints, retired traits, inactive infections, or full life history.
+
+Fork persistence is collection-level and atomic from the UI's point of view: parent-with-fork-history and child are written together before the new child is exposed as saved state. Forking itself does not trigger another Gemini call and does not recompile FUSE.
+
+### Scars
+
+Scars are durable historical facts about meaningful specimen events such as surviving a temporary infection, promoting an infection, fossilizing an accident, restoring a checkpoint, changing a genome, or being born from a fork.
+
+Scars are **not runtime prompt layers**. They do not change behavior by themselves. If a historical behavior should become active behavior, it must be represented explicitly as a trait or another approved mutation.
+
+### Lifetime drift
+
+Drift is a deterministic application calculation from stored specimen state. It does not use embeddings, hidden model states, latent-space claims, or an extra model request.
+
+A forked child captures its own birth baseline after child-local inherited IDs are created, so its lifetime drift begins at exactly zero even when it inherits traits, infections, and scars.
+
+The score is explainable from these dimensions:
+
+- enabled genome-component symmetric difference: +4 each;
+- genome assembly-mode change: +3;
+- custom-seed change: +2;
+- active post-baseline acquired trait: +3 each;
+- retired lifetime trait: +2 each;
+- distinct post-baseline infection: +1 each, capped at 4;
+- experienced post-baseline scar: +1 each, capped at 4; and
+- checkpoint restore: +1 each, capped at 3.
+
+Bands are **LOW 0–2**, **MODERATE 3–7**, **HIGH 8–14**, and **EXTREME 15+**. Generation is displayed alongside drift but is not itself a drift penalty.
+
+Specimens migrated from Round 2A use a conservative baseline. Mr. Slop does not invent chronology that the older schema did not record.
 
 ## Gemini / Google AI Studio
 
@@ -134,9 +180,11 @@ The important separation is:
 1. **Mr. Slop shell** — stable conversational identity and application-control contract.
 2. **Specimen genome** — current selected mechanisms, STACK/FUSE state, and optional custom seed.
 3. **Mutation layer** — acquired traits plus active temporary infections, applied at runtime.
-4. **Software state** — messages, checkpoints, artifacts, life history, and future scars/trajectory/controller fields.
-5. **Server transport** — Gemini generation and one-time FUSE compilation without exposing the API key to the client.
+4. **Lineage/history state** — parent/root lineage, birth baseline, typed scars, and append-only life-history evidence.
+5. **Deterministic drift layer** — explainable lifetime distance from this specimen's own birth baseline, computed without model calls.
+6. **Software state** — messages, checkpoints, artifacts, persistence, and controller/trajectory placeholders.
+7. **Server transport** — Gemini generation and one-time FUSE compilation without exposing the API key to the client.
 
-## Round 2A non-goals
+## Round 2B non-goals
 
-Round 2A deliberately does **not** implement breeding, lineage visualization, Petri-dish tournaments, drift scoring, dormant trigger ecology, Semantic Manifold/SRE integration, or external controllers. The mutation/life-history layer exists so those later systems can inherit real specimen history instead of fake lore.
+Round 2B deliberately does **not** implement breeding or two-parent inheritance, a full family-tree visualization, Petri-dish tournaments, dormant trigger ecology, Semantic Manifold/SRE/TOPOS integration, external controllers, or cloud sync. Lineage, scars, and drift now provide factual substrate for those later experiments without pretending deferred systems already exist.
