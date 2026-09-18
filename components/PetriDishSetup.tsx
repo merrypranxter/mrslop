@@ -6,6 +6,7 @@ interface PetriDishSetupProps {
   specimens: Specimen[];
   initialSpecimenId?: string;
   onRun: (specimens: Specimen[], challenge: string) => void;
+  onOpenHistory?: () => void;
   onCancel: () => void;
 }
 
@@ -19,6 +20,7 @@ const PetriDishSetup: React.FC<PetriDishSetupProps> = ({
   specimens,
   initialSpecimenId,
   onRun,
+  onOpenHistory,
   onCancel,
 }) => {
   const eligible = useMemo(
@@ -137,6 +139,9 @@ const PetriDishSetup: React.FC<PetriDishSetupProps> = ({
           >
             RUN PETRI DISH
           </button>
+          {onOpenHistory && (
+            <button type="button" onClick={onOpenHistory}>TRIAL HISTORY</button>
+          )}
           <button type="button" onClick={onCancel}>CANCEL</button>
         </div>
       </section>
