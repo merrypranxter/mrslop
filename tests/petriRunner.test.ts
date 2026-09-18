@@ -143,7 +143,7 @@ describe('Petri trial runner', () => {
     });
 
     const generate = vi.fn(async ({ systemInstruction }: any) => {
-      if (systemInstruction.includes('B')) {
+      if (systemInstruction.includes('Specimen: B')) {
         throw new Error('PROVIDER_DOWN:nope');
       }
       return { text: 'ok' };
@@ -173,7 +173,7 @@ describe('Petri trial runner', () => {
     });
 
     const firstGenerate = vi.fn(async ({ systemInstruction }: any) => {
-      if (systemInstruction.includes('B')) throw new Error('TEMP_FAIL:first');
+      if (systemInstruction.includes('Specimen: B')) throw new Error('TEMP_FAIL:first');
       return { text: 'a-ok' };
     });
     const first = await runPetriTrial(trial, { generate: firstGenerate });
