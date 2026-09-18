@@ -186,6 +186,7 @@ git commit -m "fix: enforce mutation runtime invariants"
   - `LineageRecord`
   - `DriftBaseline`
   - schema-v3 `Specimen`
+  - `captureBirthBaseline(specimen: Specimen, genome: Genome, source: DriftBaseline['source'], capturedAt?: number): DriftBaseline`
   - `migrateSpecimen(value: unknown): Specimen | null` returning v3 only.
 
 - [ ] **Step 1: Add exact schema-v3 type definitions**
@@ -328,6 +329,15 @@ it('creates native-v3 roots with immutable zero-drift birth state', () => {
   expect(specimen.birthBaseline.activeInfectionIds).toEqual([]);
   expect(specimen.birthBaseline.inheritedScarIds).toEqual([]);
 });
+
+it('can capture the final birth baseline for a building specimen when it spawns', () => {
+  const building = makeSpecimen(emptyGenome, 'NEW SPECIMEN', 'building');
+  const baseline = captureBirthBaseline(building, installedGenome, 'native-v3', 1234);
+  expect(baseline.capturedAt).toBe(1234);
+  expect(baseline.genome).toEqual(installedGenome);
+  expect(baseline.activeTraitIds).toEqual([]);
+  expect(baseline.activeInfectionIds).toEqual([]);
+});
 ```
 
 Update existing migration/store tests to expect schema v3 rather than schema v2.
@@ -398,7 +408,31 @@ const migrateV2ToV3 = (value: LegacyV2Specimen): Specimen => ({
 });
 ```
 
-6. Update `makeSpecimen` to create native-v3 root lineage and baseline in the same construction.
+6. Add `captureBirthBaseline` as a small snapshot helper:
+
+```ts
+export const captureBirthBaseline = (
+  specimen: Specimen,
+  genome: Genome,
+  source: DriftBaseline['source'],
+  capturedAt = Date.now(),
+): DriftBaseline => ({
+  capturedAt,
+  source,
+  genome: cloneGenomeSnapshot(genome),
+  activeTraitIds: specimen.acquiredTraits
+    .filter(trait => trait.status === 'active')
+    .map(trait => trait.id),
+  activeInfectionIds: specimen.infections
+    .filter(infection => infection.status === 'active')
+    .map(infection => infection.id),
+  inheritedScarIds: specimen.scars
+    .filter(scar => scar.origin === 'inherited')
+    .map(scar => scar.id),
+});
+```
+
+7. Update `makeSpecimen` to create native-v3 root lineage and baseline in the same construction. For a `building` specimen the initial empty baseline is provisional; Task 7 must replace it exactly once when the selected genome is installed and the specimen enters `spawned`.
 
 Do not change `MR_SLOP_STORAGE_KEY`.
 
@@ -717,7 +751,10 @@ In `services/specimenStore.ts`:
 
 In `MrSlopTerminal.tsx`:
 
-- after approved genome replacement succeeds, call `addGenomeChangeScar` with the checkpointed previous genome ID and new genome ID before committing.
+- after approved genome replacement succeeds, append a `genome-mutated` life-history event containing the previous/new genome relationship;
+- then call `addGenomeChangeScar` with the previous genome ID, new genome ID, and the new history-event ID before committing.
+
+`addGenomeChangeScar` must reference that `genome-mutated` event from the scar so the scar is evidence-backed rather than a disconnected label.
 
 - [ ] **Step 5: Run focused tests and full gate**
 
@@ -1060,7 +1097,7 @@ specimenNames?: Record<string, string>;
 
 - [ ] **Step 1: Write App/terminal fork UI tests**
 
-In `tests/forkUI.test.tsx`, cover these behaviors:
+In `tests/forkUI.test.tsx`, cover these behaviors, plus final baseline capture for building specimens:
 
 ```ts
 it('shows blocking fork approval but does not persist before approval', async () => {
@@ -1095,6 +1132,15 @@ it('does not change visible parent when fork persistence rejects', async () => {
   // approve fork...
   expect(screen.getByText(/fork could not be saved/i)).toBeInTheDocument();
   expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ id: expect.not.stringMatching(root.id) }));
+});
+
+it('finalizes a building specimen baseline when its first genome is installed', async () => {
+  const building = makeSpecimen(emptyGenome, 'NEW SPECIMEN', 'building');
+  // choose BUILD THIS for an installed genome...
+  const spawned = latestSpecimen(onChange);
+  expect(spawned.phase).toBe('spawned');
+  expect(spawned.birthBaseline.genome).toEqual(spawned.birthGenome);
+  expect(calculateDrift(spawned).score).toBe(0);
 });
 ```
 
@@ -1158,7 +1204,23 @@ When an envelope contains `forkAction`, open existing blocking modal with:
 - reason: include model reason plus factual "parent remains unchanged; child starts a fresh conversation"
 - one approval option: `CREATE CHILD`.
 
-On approval:
+When `spawnBuildingSpecimen` installs the first real genome, update all three birth fields together:
+
+```ts
+const bornAt = Date.now();
+const next: Specimen = {
+  ...working,
+  phase: 'spawned',
+  birthGenome: snapshotGenome(genome),
+  currentGenome: snapshotGenome(genome),
+  birthBaseline: captureBirthBaseline(working, genome, 'native-v3', bornAt),
+  lastModified: bornAt,
+};
+```
+
+Do not recapture the baseline on later genome changes.
+
+On fork approval:
 
 ```ts
 try {
