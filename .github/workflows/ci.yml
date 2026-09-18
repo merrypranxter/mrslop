@@ -3,6 +3,7 @@ name: Mr Slop CI
 on:
   push:
     branches:
+      - main
       - round1-foundation
   pull_request:
     branches:
