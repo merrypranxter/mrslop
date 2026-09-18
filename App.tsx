@@ -6,6 +6,7 @@ import BreedingResultCard from './components/BreedingResultCard';
 import MrSlopTerminal from './components/MrSlopTerminal';
 import PetriDishRunner from './components/PetriDishRunner';
 import PetriDishSetup from './components/PetriDishSetup';
+import PetriHistory from './components/PetriHistory';
 import PartPicker from './components/PartPicker';
 import SpecimenSidebar from './components/SpecimenSidebar';
 import { SLOP_LIBRARY } from './data/slopLibrary';
@@ -46,6 +47,8 @@ function App() {
   const [breedingError, setBreedingError] = useState<string | null>(null);
   const [isSavingBreeding, setIsSavingBreeding] = useState(false);
   const [showPetriSetup, setShowPetriSetup] = useState(false);
+  const [showPetriHistory, setShowPetriHistory] = useState(false);
+  const [petriHistoricalView, setPetriHistoricalView] = useState(false);
   const [activePetriTrial, setActivePetriTrial] = useState<PetriTrial | null>(null);
   const [petriTrials, setPetriTrials] = useState<PetriTrial[]>([]);
   const petriTrialsRef = useRef<PetriTrial[]>([]);
@@ -188,6 +191,8 @@ function App() {
 
   const openPetriDish = () => {
     setShowPetriSetup(true);
+    setShowPetriHistory(false);
+    setPetriHistoricalView(false);
     setActivePetriTrial(null);
     setPetriBlind(true);
     setAppError(null);
@@ -209,6 +214,7 @@ function App() {
     const controller = new AbortController();
     petriAbortRef.current = controller;
     setShowPetriSetup(false);
+    setPetriHistoricalView(false);
     setIsPetriRunning(true);
     setActivePetriTrial({
       ...trial,
@@ -226,6 +232,21 @@ function App() {
       petriAbortRef.current = null;
       setIsPetriRunning(false);
     }
+  };
+
+  const openPetriHistory = () => {
+    setShowPetriSetup(false);
+    setActivePetriTrial(null);
+    setShowPetriHistory(true);
+    setPetriBlind(true);
+  };
+
+  const openHistoricalPetriTrial = (trial: PetriTrial) => {
+    setShowPetriHistory(false);
+    setShowPetriSetup(false);
+    setPetriHistoricalView(true);
+    setPetriBlind(true);
+    setActivePetriTrial(structuredClone(trial));
   };
 
   const retryPetri = async (entrantSnapshotId: string) => {
@@ -440,7 +461,19 @@ function App() {
           specimens={specimens}
           initialSpecimenId={activeSpecimen?.id}
           onRun={(selected, challenge) => void startPetriDish(selected, challenge)}
+          onOpenHistory={openPetriHistory}
           onCancel={() => setShowPetriSetup(false)}
+        />
+      )}
+
+      {showPetriHistory && (
+        <PetriHistory
+          trials={petriTrials}
+          onOpen={openHistoricalPetriTrial}
+          onClose={() => {
+            setShowPetriHistory(false);
+            setShowPetriSetup(true);
+          }}
         />
       )}
 
@@ -449,11 +482,15 @@ function App() {
           trial={activePetriTrial}
           blind={petriBlind}
           busy={isPetriRunning}
+          readOnly={petriHistoricalView}
           onToggleBlind={() => setPetriBlind(value => !value)}
           onRetry={entrantId => void retryPetri(entrantId)}
           onAbort={() => petriAbortRef.current?.abort()}
           onSelectionChange={ids => void updatePetriSelection(ids)}
-          onClose={() => setActivePetriTrial(null)}
+          onClose={() => {
+            setActivePetriTrial(null);
+            setPetriHistoricalView(false);
+          }}
         />
       )}
 

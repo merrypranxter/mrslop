@@ -6,6 +6,7 @@ interface PetriDishRunnerProps {
   trial: PetriTrial;
   blind: boolean;
   busy: boolean;
+  readOnly?: boolean;
   onToggleBlind: () => void;
   onRetry: (entrantSnapshotId: string) => void;
   onAbort: () => void;
@@ -17,6 +18,7 @@ const PetriDishRunner: React.FC<PetriDishRunnerProps> = ({
   trial,
   blind,
   busy,
+  readOnly = false,
   onToggleBlind,
   onRetry,
   onAbort,
@@ -50,7 +52,7 @@ const PetriDishRunner: React.FC<PetriDishRunnerProps> = ({
           <button type="button" onClick={onToggleBlind}>
             {blind ? 'REVEAL IDENTITIES' : 'BLIND VIEW'}
           </button>
-          {busy && trial.status === 'running' && (
+          {!readOnly && busy && trial.status === 'running' && (
             <button type="button" onClick={onAbort}>ABORT PETRI DISH</button>
           )}
         </div>
@@ -89,7 +91,7 @@ const PetriDishRunner: React.FC<PetriDishRunnerProps> = ({
                 )}
 
                 <div className="petri-result-actions">
-                  {result.status === 'failed' && !busy && (
+                  {!readOnly && result.status === 'failed' && !busy && (
                     <button
                       type="button"
                       aria-label={`Retry ${label}`}
