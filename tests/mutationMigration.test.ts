@@ -92,13 +92,13 @@ describe('Round 1 specimen migration', () => {
     storageMocks.setItem.mockClear();
   });
 
-  it('migrates a Round 1 specimen into current schema v3', async () => {
+  it('migrates a Round 1 specimen into current schema v4', async () => {
     const old = makeLegacyV1Fixture();
     storageMocks.storage.set(MR_SLOP_STORAGE_KEY, [old]);
 
     const [migrated] = await loadSpecimens();
 
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(migrated.birthGenome).toEqual(old.birthGenome);
     expect(migrated.currentGenome).toEqual(old.currentGenome);
     expect(migrated.messages).toEqual(old.messages);

@@ -121,7 +121,7 @@ const v2Fixture = () => ({
   lastModified: 20,
 });
 
-describe('Round 2B schema v3 migration', () => {
+describe('Round 2B data migration into current schema', () => {
   it('migrates v2 without losing Round 2A state', () => {
     const old = v2Fixture();
     const migrated = migrateSpecimen(old);
@@ -129,7 +129,7 @@ describe('Round 2B schema v3 migration', () => {
     expect(migrated).not.toBeNull();
     if (!migrated) return;
 
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(migrated.id).toBe(old.id);
     expect(migrated.messages).toEqual(old.messages);
     expect(migrated.artifacts).toEqual(old.artifacts);
@@ -137,8 +137,9 @@ describe('Round 2B schema v3 migration', () => {
     expect(migrated.infections).toEqual(old.infections);
     expect(migrated.lifeHistory).toEqual(old.lifeHistory);
     expect(migrated.lineage).toEqual({
-      rootSpecimenId: old.id,
-      parentSpecimenId: null,
+      kind: 'root',
+      parentSpecimenIds: [],
+      rootSpecimenIds: [old.id],
       generation: 0,
       source: 'migrated-v2',
     });
@@ -154,17 +155,18 @@ describe('Round 2B schema v3 migration', () => {
     expect(migrated?.birthBaseline.inheritedScarIds).toEqual([]);
   });
 
-  it('creates native-v3 roots with a zero-drift birth baseline', () => {
+  it('creates native-v4 roots with a zero-drift birth baseline', () => {
     const specimen = makeSpecimen(genome, 'ROOT');
 
-    expect(specimen.schemaVersion).toBe(3);
+    expect(specimen.schemaVersion).toBe(4);
     expect(specimen.lineage).toEqual({
-      rootSpecimenId: specimen.id,
-      parentSpecimenId: null,
+      kind: 'root',
+      parentSpecimenIds: [],
+      rootSpecimenIds: [specimen.id],
       generation: 0,
-      source: 'native-v3',
+      source: 'native-v4',
     });
-    expect(specimen.birthBaseline.source).toBe('native-v3');
+    expect(specimen.birthBaseline.source).toBe('native-v4');
     expect(specimen.birthBaseline.genome).toEqual(specimen.birthGenome);
     expect(specimen.birthBaseline.activeTraitIds).toEqual([]);
     expect(specimen.birthBaseline.activeInfectionIds).toEqual([]);
@@ -176,10 +178,10 @@ describe('Round 2B schema v3 migration', () => {
     const installed: Genome = { id: 'installed', mode: 'stack', components: [] };
     const building = makeSpecimen(empty, 'NEW SPECIMEN', 'building');
 
-    const baseline = captureBirthBaseline(building, installed, 'native-v3', 1234);
+    const baseline = captureBirthBaseline(building, installed, 'native-v4', 1234);
 
     expect(baseline.capturedAt).toBe(1234);
-    expect(baseline.source).toBe('native-v3');
+    expect(baseline.source).toBe('native-v4');
     expect(baseline.genome).toEqual(installed);
     expect(baseline.genome).not.toBe(installed);
     expect(baseline.activeTraitIds).toEqual([]);

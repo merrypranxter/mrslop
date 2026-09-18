@@ -31,6 +31,7 @@ const cloneProvenance = <T extends AcquiredTrait['provenance']>(provenance: T): 
 
 const cloneHistory = (event: LifeHistoryEvent): LifeHistoryEvent => ({
   ...event,
+  ...(event.relatedSpecimenIds ? { relatedSpecimenIds: [...event.relatedSpecimenIds] } : {}),
   messageIds: [...event.messageIds],
   artifactIds: [...event.artifactIds],
 });
@@ -43,11 +44,26 @@ const inheritedTrait = (
   ...trait,
   id: crypto.randomUUID(),
   provenance: cloneProvenance(trait.provenance),
-  inheritedFrom: {
+  inheritanceSources: [{
     specimenId: parent.id,
     recordId: trait.id,
     inheritedAt: now,
-  },
+  }],
+  ...(trait.inheritedSourceOriginTypes
+    ? { inheritedSourceOriginTypes: [...trait.inheritedSourceOriginTypes] }
+    : {}),
+  ...(trait.supportingScarIdsAtBirth
+    ? { supportingScarIdsAtBirth: [...trait.supportingScarIdsAtBirth] }
+    : {}),
+  ...(trait.birthVariation
+    ? {
+        birthVariation: {
+          ...trait.birthVariation,
+          before: { ...trait.birthVariation.before },
+          after: { ...trait.birthVariation.after },
+        },
+      }
+    : {}),
 });
 
 const inheritedInfection = (
@@ -58,11 +74,11 @@ const inheritedInfection = (
   ...infection,
   id: crypto.randomUUID(),
   provenance: cloneProvenance(infection.provenance),
-  inheritedFrom: {
+  inheritanceSources: [{
     specimenId: parent.id,
     recordId: infection.id,
     inheritedAt: now,
-  },
+  }],
 });
 
 const inheritedScar = (
@@ -84,7 +100,10 @@ const inheritedScar = (
 });
 
 export const nextForkName = (parent: Specimen, specimens: Specimen[]): string => {
-  const directChildren = specimens.filter(specimen => specimen.lineage.parentSpecimenId === parent.id);
+  const directChildren = specimens.filter(specimen =>
+    specimen.lineage.kind === 'fork' &&
+    specimen.lineage.parentSpecimenIds.length === 1 &&
+    specimen.lineage.parentSpecimenIds[0] === parent.id);
   let index = directChildren.length + 1;
   let candidate = `${parent.name} / FORK ${index}`;
 
@@ -113,6 +132,7 @@ export const forkSpecimen = (
     type: 'specimen-forked',
     summary: `Forked child specimen: ${childName.trim() || 'UNNAMED CHILD'}`,
     relatedSpecimenId: childId,
+    relatedSpecimenIds: [childId],
     messageIds: [],
     artifactIds: [],
     createdAt: now,
@@ -136,23 +156,31 @@ export const forkSpecimen = (
       acquiredTraits: checkpoint.acquiredTraits.map(trait => ({
         ...trait,
         provenance: cloneProvenance(trait.provenance),
-        ...(trait.inheritedFrom ? { inheritedFrom: { ...trait.inheritedFrom } } : {}),
+        ...(trait.inheritanceSources
+          ? { inheritanceSources: trait.inheritanceSources.map(source => ({ ...source })) }
+          : {}),
       })),
       infections: checkpoint.infections.map(infection => ({
         ...infection,
         provenance: cloneProvenance(infection.provenance),
-        ...(infection.inheritedFrom ? { inheritedFrom: { ...infection.inheritedFrom } } : {}),
+        ...(infection.inheritanceSources
+          ? { inheritanceSources: infection.inheritanceSources.map(source => ({ ...source })) }
+          : {}),
       })),
     })),
     acquiredTraits: parent.acquiredTraits.map(trait => ({
       ...trait,
       provenance: cloneProvenance(trait.provenance),
-      ...(trait.inheritedFrom ? { inheritedFrom: { ...trait.inheritedFrom } } : {}),
+      ...(trait.inheritanceSources
+        ? { inheritanceSources: trait.inheritanceSources.map(source => ({ ...source })) }
+        : {}),
     })),
     infections: parent.infections.map(infection => ({
       ...infection,
       provenance: cloneProvenance(infection.provenance),
-      ...(infection.inheritedFrom ? { inheritedFrom: { ...infection.inheritedFrom } } : {}),
+      ...(infection.inheritanceSources
+        ? { inheritanceSources: infection.inheritanceSources.map(source => ({ ...source })) }
+        : {}),
     })),
     lifeHistory: [...parent.lifeHistory.map(cloneHistory), parentForkEvent],
     scars: parent.scars.map(scar => ({
@@ -170,7 +198,11 @@ export const forkSpecimen = (
       activeInfectionIds: [...parent.birthBaseline.activeInfectionIds],
       inheritedScarIds: [...parent.birthBaseline.inheritedScarIds],
     },
-    lineage: { ...parent.lineage },
+    lineage: {
+      ...parent.lineage,
+      parentSpecimenIds: [...parent.lineage.parentSpecimenIds],
+      rootSpecimenIds: [...parent.lineage.rootSpecimenIds],
+    },
     lastModified: now,
   };
 
@@ -210,6 +242,7 @@ export const forkSpecimen = (
       : `Inherited scar from ${parent.name}: ${scar.name}`,
     scarId: scar.id,
     relatedSpecimenId: parent.id,
+    relatedSpecimenIds: [parent.id],
     messageIds: [],
     artifactIds: [],
     createdAt: now,
@@ -228,6 +261,7 @@ export const forkSpecimen = (
     type: 'specimen-born-from-fork',
     summary: `Born from fork of ${parent.name}.`,
     relatedSpecimenId: parent.id,
+    relatedSpecimenIds: [parent.id],
     messageIds: [],
     artifactIds: [],
     createdAt: now,
@@ -252,7 +286,7 @@ export const forkSpecimen = (
   };
 
   const child: Specimen = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: childId,
     name,
     phase: 'spawned',
@@ -265,15 +299,16 @@ export const forkSpecimen = (
     infections: childInfections,
     lifeHistory: [childBirthEvent, ...scarEvents],
     scars: childScars,
-    birthBaseline: captureBirthBaseline(childShell, childBirthGenome, 'fork-v3', now),
+    birthBaseline: captureBirthBaseline(childShell, childBirthGenome, 'fork-v4', now),
     lineage: {
-      rootSpecimenId: parent.lineage.rootSpecimenId,
-      parentSpecimenId: parent.id,
+      kind: 'fork',
+      parentSpecimenIds: [parent.id],
+      rootSpecimenIds: [...parent.lineage.rootSpecimenIds],
       generation: parent.lineage.generation + 1,
       forkedAt: now,
       forkSourceEventId: parentForkEventId,
       forkSourceGenomeId: parent.currentGenome.id,
-      source: 'fork-v3',
+      source: 'fork-v4',
     },
     trajectory: null,
     controllerState: null,

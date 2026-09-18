@@ -620,7 +620,7 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           : working.name,
         birthGenome,
         currentGenome: snapshotGenome(genome),
-        birthBaseline: captureBirthBaseline(working, birthGenome, 'native-v3', bornAt),
+        birthBaseline: captureBirthBaseline(working, birthGenome, 'native-v4', bornAt),
         lastModified: bornAt,
       };
       commit(next);

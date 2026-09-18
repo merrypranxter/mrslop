@@ -93,14 +93,27 @@ export interface Infection {
   durationTurns?: number;
   remainingTurns?: number;
   provenance: MutationProvenance;
-  inheritedFrom?: InheritanceRef;
+  inheritanceSources?: InheritanceRef[];
   createdAt: number;
   endedAt?: number;
   endReason?: string;
 }
 
 export type TraitStatus = 'active' | 'retired';
-export type TraitOriginType = 'explicit' | 'promoted-infection' | 'fossilized-accident' | 'mr-slop-proposal';
+export type TraitOriginType =
+  | 'explicit'
+  | 'promoted-infection'
+  | 'fossilized-accident'
+  | 'mr-slop-proposal'
+  | 'inherited';
+
+export interface TraitBirthVariation {
+  mutatorId: string;
+  mutatorVersion: string;
+  sourceTraitFingerprint: string;
+  before: Record<string, string | number | boolean | null>;
+  after: Record<string, string | number | boolean | null>;
+}
 
 export interface AcquiredTrait {
   id: string;
@@ -110,7 +123,10 @@ export interface AcquiredTrait {
   status: TraitStatus;
   originType: TraitOriginType;
   provenance: MutationProvenance;
-  inheritedFrom?: InheritanceRef;
+  inheritanceSources?: InheritanceRef[];
+  inheritedSourceOriginTypes?: TraitOriginType[];
+  supportingScarIdsAtBirth?: string[];
+  birthVariation?: TraitBirthVariation;
   createdAt: number;
   retiredAt?: number;
 }
@@ -129,7 +145,9 @@ export type LifeHistoryEventType =
   | 'specimen-forked'
   | 'specimen-born-from-fork'
   | 'scar-acquired'
-  | 'scar-inherited';
+  | 'scar-inherited'
+  | 'specimen-offspring-bred'
+  | 'specimen-born-from-breeding';
 
 export interface LifeHistoryEvent {
   id: string;
@@ -139,6 +157,9 @@ export interface LifeHistoryEvent {
   checkpointId?: string;
   scarId?: string;
   relatedSpecimenId?: string;
+  relatedSpecimenIds?: string[];
+  geneticsReceiptId?: string;
+  breedingSeed?: string;
   messageIds: string[];
   artifactIds: string[];
   createdAt: number;
@@ -207,28 +228,139 @@ export interface Scar {
   artifactIds: string[];
 }
 
+export type LineageKind = 'root' | 'fork' | 'bred';
+export type LineageSource =
+  | 'native-v4'
+  | 'fork-v4'
+  | 'bred-v4'
+  | 'migrated-v3'
+  | 'migrated-v2';
+
 export interface LineageRecord {
-  rootSpecimenId: string;
-  parentSpecimenId: string | null;
+  kind: LineageKind;
+  parentSpecimenIds: string[];
+  rootSpecimenIds: string[];
   generation: number;
   forkedAt?: number;
   forkSourceEventId?: string;
   forkSourceCheckpointId?: string;
   forkSourceGenomeId?: string;
-  source: 'native-v3' | 'fork-v3' | 'migrated-v2';
+  bredAt?: number;
+  geneticsReceiptId?: string;
+  source: LineageSource;
 }
+
+export type DriftBaselineSource =
+  | 'native-v3'
+  | 'fork-v3'
+  | 'migrated-v2'
+  | 'native-v4'
+  | 'fork-v4'
+  | 'bred-v4';
 
 export interface DriftBaseline {
   capturedAt: number;
-  source: 'native-v3' | 'fork-v3' | 'migrated-v2';
+  source: DriftBaselineSource;
   genome: Genome;
   activeTraitIds: string[];
   activeInfectionIds: string[];
   inheritedScarIds: string[];
 }
 
+export interface GeneticsComponentDecision {
+  fingerprint: string;
+  componentId: string;
+  role: ComponentKind;
+  sourceParentIds: string[];
+  status: 'unique' | 'shared' | 'divergent-allele';
+  weight: number;
+  uniform: number;
+  selectionKey: number;
+  selected: boolean;
+  balanceRepair?: 'removed' | 'added';
+  childOrderMetric?: number;
+}
+
+export interface GeneticsTraitDecision {
+  fingerprint: string;
+  sourceParentIds: string[];
+  sourceTraitIds: string[];
+  sourceOriginTypes: TraitOriginType[];
+  shared: boolean;
+  baseProbability: number;
+  supportingScarIds: string[];
+  scarBonus: number;
+  finalProbability: number;
+  roll: number;
+  passed: boolean;
+  inheritanceStrength?: number;
+  result: 'inherited' | 'failed-roll' | 'displaced-by-cap';
+}
+
+export interface GeneticsMutationReceipt {
+  triggerRoll: number;
+  threshold: number;
+  triggered: boolean;
+  preferredBranch?: 'canonical-component' | 'trait-variation';
+  attemptedBranches: Array<'canonical-component' | 'trait-variation'>;
+  outcome: 'none' | 'canonical-component' | 'trait-variation' | 'no-valid-candidate';
+  componentId?: string;
+  sourceTraitFingerprint?: string;
+  mutatorId?: string;
+  mutatorVersion?: string;
+  fallbackUsed?: boolean;
+}
+
+export interface GeneticsGenomeReceipt {
+  parentEnabledCounts: [number, number];
+  rawMean: number;
+  roundingRoll?: number;
+  targetSize: number;
+  roleCounts: Record<ComponentKind, [number, number]>;
+  roleQuotas: Record<ComponentKind, number>;
+  redistributedSlots: Array<{
+    fromRole: ComponentKind;
+    toRole: ComponentKind;
+    count: number;
+  }>;
+  candidates: GeneticsComponentDecision[];
+  initialUniqueContribution: [number, number];
+  finalUniqueContribution: [number, number];
+  balanceNote?: string;
+}
+
+export interface GeneticsTraitReceipt {
+  candidates: GeneticsTraitDecision[];
+  inheritedFingerprints: string[];
+}
+
+export interface GeneticsFinalBirthState {
+  componentFingerprints: string[];
+  componentIds: string[];
+  traitFingerprints: string[];
+  mode: 'stack';
+  expectedLifetimeDrift: 0;
+}
+
+export interface GeneticsReceipt {
+  id: string;
+  algorithmVersion: string;
+  breedingSeed: string;
+  idempotencyKey: string;
+  previewCreatedAt: number;
+  persistedAt?: number;
+  parentAId: string;
+  parentBId: string;
+  canonicalParentIds: [string, string];
+  parentStateHashes: [string, string];
+  genome: GeneticsGenomeReceipt;
+  traits: GeneticsTraitReceipt;
+  mutation: GeneticsMutationReceipt;
+  finalBirthState: GeneticsFinalBirthState;
+}
+
 export interface Specimen {
-  schemaVersion: 3;
+  schemaVersion: 4;
   id: string;
   name: string;
   phase: SpecimenPhase;
@@ -243,6 +375,7 @@ export interface Specimen {
   scars: Scar[];
   birthBaseline: DriftBaseline;
   lineage: LineageRecord;
+  geneticsReceipt?: GeneticsReceipt;
   trajectory: unknown | null;
   controllerState: unknown | null;
   metrics: unknown | null;

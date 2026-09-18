@@ -137,10 +137,11 @@ describe('Round 2B fork UI', () => {
     child = {
       ...child,
       lineage: {
-        rootSpecimenId: 'root-id',
-        parentSpecimenId: 'parent-id',
+        kind: 'fork',
+        rootSpecimenIds: ['root-id'],
+        parentSpecimenIds: ['parent-id'],
         generation: 2,
-        source: 'fork-v3',
+        source: 'fork-v4',
         forkedAt: 1,
       },
     };

@@ -138,12 +138,13 @@ describe('specimen fork engine', () => {
     expect(child.id).not.toBe(parent.id);
     expect(child.name).toBe('PARENT SLOP / FORK 1');
     expect(child.lineage).toMatchObject({
-      rootSpecimenId: parent.lineage.rootSpecimenId,
-      parentSpecimenId: parent.id,
+      kind: 'fork',
+      rootSpecimenIds: parent.lineage.rootSpecimenIds,
+      parentSpecimenIds: [parent.id],
       generation: parent.lineage.generation + 1,
       forkedAt: 1000,
       forkSourceGenomeId: parent.currentGenome.id,
-      source: 'fork-v3',
+      source: 'fork-v4',
     });
 
     expect(child.birthGenome).toEqual(parent.currentGenome);
@@ -155,7 +156,7 @@ describe('specimen fork engine', () => {
     expect(child.acquiredTraits).toHaveLength(2);
     expect(child.acquiredTraits.every(item => item.status === 'active')).toBe(true);
     expect(child.acquiredTraits.map(item => item.id)).not.toEqual(parentActiveTraits.map(item => item.id));
-    expect(child.acquiredTraits.map(item => item.inheritedFrom)).toEqual(
+    expect(child.acquiredTraits.map(item => item.inheritanceSources?.[0])).toEqual(
       parentActiveTraits.map(item => ({
         specimenId: parent.id,
         recordId: item.id,
@@ -168,11 +169,11 @@ describe('specimen fork engine', () => {
       name: 'Metric Vertigo',
       status: 'active',
       remainingTurns: 3,
-      inheritedFrom: {
+      inheritanceSources: [{
         specimenId: parent.id,
         recordId: 'infection-active',
         inheritedAt: 1000,
-      },
+      }],
     });
     expect(child.infections[0].id).not.toBe('infection-active');
 
@@ -214,7 +215,7 @@ describe('specimen fork engine', () => {
       inheritedAt: 1000,
     });
 
-    expect(child.birthBaseline.source).toBe('fork-v3');
+    expect(child.birthBaseline.source).toBe('fork-v4');
     expect(child.birthBaseline.capturedAt).toBe(1000);
     expect(child.birthBaseline.activeTraitIds).toEqual(child.acquiredTraits.map(item => item.id));
     expect(child.birthBaseline.activeInfectionIds).toEqual(child.infections.map(item => item.id));

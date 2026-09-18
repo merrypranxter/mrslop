@@ -17,15 +17,18 @@ const LineageStatus: React.FC<LineageStatusProps> = ({
   const experiencedScars = specimen.scars.filter(scar => scar.origin === 'experienced').length;
   const inheritedScars = specimen.scars.filter(scar => scar.origin === 'inherited').length;
   const inheritedTraits = specimen.acquiredTraits.filter(
-    trait => trait.status === 'active' && trait.inheritedFrom,
+    trait => trait.status === 'active' && (trait.inheritanceSources?.length ?? 0) > 0,
   ).length;
   const inheritedInfections = specimen.infections.filter(
-    infection => infection.status === 'active' && infection.inheritedFrom,
+    infection => infection.status === 'active' && (infection.inheritanceSources?.length ?? 0) > 0,
   ).length;
-  const parentName = specimen.lineage.parentSpecimenId
-    ? specimenNames[specimen.lineage.parentSpecimenId] || specimen.lineage.parentSpecimenId
-    : 'ROOT';
-  const rootName = specimenNames[specimen.lineage.rootSpecimenId] || specimen.lineage.rootSpecimenId;
+
+  const parentNames = specimen.lineage.parentSpecimenIds.map(
+    id => specimenNames[id] || id,
+  );
+  const rootNames = specimen.lineage.rootSpecimenIds.map(
+    id => specimenNames[id] || id,
+  );
 
   return (
     <div className="lineage-status">
@@ -41,8 +44,12 @@ const LineageStatus: React.FC<LineageStatusProps> = ({
 
       {open && (
         <div className="lineage-status-panel">
-          <strong>PARENT: {parentName}</strong>
-          <span>ROOT: {rootName}</span>
+          <strong>
+            {parentNames.length === 0
+              ? 'PARENT: ROOT'
+              : (parentNames.length === 1 ? 'PARENT: ' : 'PARENTS: ') + parentNames.join(' × ')}
+          </strong>
+          <span>{rootNames.length === 1 ? 'ROOT' : 'ROOTS'}: {rootNames.join(' · ')}</span>
           <span>GENERATION: {specimen.lineage.generation}</span>
           <p>{report.explanation}</p>
           <small>{experiencedScars} experienced scars · {inheritedScars} inherited scars</small>
