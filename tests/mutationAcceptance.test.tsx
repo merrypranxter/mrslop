@@ -27,7 +27,7 @@ import MrSlopTerminal from '../components/MrSlopTerminal';
 import { SLOP_LIBRARY } from '../data/slopLibrary';
 import { createGenome } from '../lib/genome';
 import { loadSpecimens, makeSpecimen, saveSpecimens } from '../services/specimenStore';
-import { MutationProposal, Specimen } from '../types';
+import { MutationProposal, Role, Specimen } from '../types';
 
 const infectionProposal: MutationProposal = {
   id: 'acceptance-infection',
@@ -49,13 +49,34 @@ const fossilProposal: MutationProposal = {
   description: 'Translate harmony problems into navigation problems.',
   prompt: 'When harmony stalls, remap the problem as navigation through a strange space.',
   reason: 'The behavior emerged repeatedly and produced useful results.',
-  sourceMessageIds: ['source-fossil-message'],
-  sourceArtifactIds: ['source-artifact'],
+  sourceMessageIds: ['source-fossil-message', 'invented-message-id'],
+  sourceArtifactIds: ['source-artifact', 'invented-artifact-id'],
   sourceType: 'conversation',
 };
 
-const specimenFixture = (): Specimen =>
-  makeSpecimen(createGenome(['tm-01'], SLOP_LIBRARY, 'stack'), 'Acceptance Slop');
+const specimenFixture = (): Specimen => {
+  const specimen = makeSpecimen(createGenome(['tm-01'], SLOP_LIBRARY, 'stack'), 'Acceptance Slop');
+  return {
+    ...specimen,
+    messages: [{
+      id: 'source-fossil-message',
+      role: Role.MODEL,
+      content: 'Earlier, harmony unexpectedly behaved like navigation through a strange space.',
+      timestamp: 1,
+    }],
+    artifacts: [{
+      id: 'source-artifact',
+      specimenId: specimen.id,
+      messageId: 'source-fossil-message',
+      kind: 'note',
+      title: 'Navigation accident',
+      content: 'Harmony remapped into navigation.',
+      genomeId: specimen.currentGenome.id,
+      componentIds: specimen.currentGenome.components.map(component => component.id),
+      createdAt: 2,
+    }],
+  };
+};
 
 const sendText = (text: string) => {
   fireEvent.change(screen.getByPlaceholderText(/talk to mr\. slop/i), {
