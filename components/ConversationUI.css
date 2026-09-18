@@ -64,6 +64,144 @@
   cursor: pointer;
 }
 
+
+.mutation-status {
+  flex: 0 0 auto;
+  position: relative;
+  border-bottom: 1px solid rgba(185,255,34,.12);
+  background: rgba(185,255,34,.018);
+}
+
+.mutation-status-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--slop-lime);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  cursor: pointer;
+}
+
+.mutation-status-panel {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 10px;
+  width: min(520px, calc(100vw - 20px));
+  padding: 8px;
+  border: 1px solid rgba(185,255,34,.28);
+  background: rgba(4,7,5,.98);
+  box-shadow: 0 14px 34px rgba(0,0,0,.5), 0 0 20px rgba(185,255,34,.05);
+}
+
+.mutation-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.mutation-status-row:last-child { border-bottom: 0; }
+.mutation-status-row > div:first-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mutation-status-row strong { color: var(--slop-lime); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mutation-status-row small { color: #76736f; font-size: 7px; letter-spacing: .07em; }
+.mutation-status-row.trait-row strong { color: var(--slop-purple); }
+
+.mutation-status-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.mutation-status-actions button {
+  border: 1px solid rgba(185,255,34,.22);
+  background: transparent;
+  color: var(--slop-lime);
+  padding: 5px 7px;
+  font-size: 7px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mutation-status-actions button:last-child {
+  border-color: rgba(255,122,24,.24);
+  color: var(--slop-orange);
+}
+
+.mutation-card {
+  width: min(680px, 96%);
+  margin: 16px 0 22px;
+  padding: 14px;
+  border: 1px solid rgba(185,255,34,.34);
+  background: linear-gradient(135deg, rgba(185,255,34,.055), rgba(157,77,255,.035));
+  box-shadow: 0 0 24px rgba(185,255,34,.06);
+}
+
+.mutation-card-kicker {
+  display: block;
+  color: var(--slop-lime);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.mutation-card > strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--slop-white);
+  font-size: 13px;
+}
+
+.mutation-card > p {
+  margin: 7px 0;
+  color: #b2aaba;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.mutation-card > small {
+  display: block;
+  color: #777080;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.mutation-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.mutation-card-actions button {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.25);
+  color: #a7a0ae;
+  padding: 8px 9px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.mutation-card-actions .mutation-primary {
+  border-color: rgba(185,255,34,.42);
+  color: var(--slop-lime);
+  background: rgba(185,255,34,.035);
+}
+
+.mutation-card-actions .mutation-dismiss {
+  color: #716a77;
+}
+
 .slop-chat-log {
   flex: 1;
   min-height: 0;
