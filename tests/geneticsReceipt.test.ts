@@ -99,7 +99,7 @@ describe('GENETICS RECEIPT rendering and replay', () => {
     expect(text).toContain('GENETICS RECEIPT');
     expect(text).toContain('mrslop-breeding-v1');
     expect(text).toContain('ordinary target');
-    expect(text).toContain('birth mutation');
+    expect(text).toContain('Birth mutation');
     expect(text).toContain('ALPHA');
     expect(text).toContain('BETA');
   });
