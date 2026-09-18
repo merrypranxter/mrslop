@@ -195,7 +195,7 @@ const parseUiEvent = (value: unknown): ChoiceCardEvent | StructuralDecisionEvent
 
 const stripJsonFence = (raw: string): string => {
   const trimmed = raw.trim();
-  const match = trimmed.match(/^\`\`\`(?:json)?\\s*([\\s\\S]*?)\\s*\`\`\`$/i);
+  const match = trimmed.match(/^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i);
   return match ? match[1].trim() : trimmed;
 };
 
