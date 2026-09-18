@@ -202,6 +202,101 @@
   color: #716a77;
 }
 
+.lineage-status {
+  flex: 0 0 auto;
+  position: relative;
+  border-bottom: 1px solid rgba(157,77,255,.14);
+  background: rgba(157,77,255,.018);
+}
+
+.lineage-status-toggle {
+  width: 100%;
+  padding: 6px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--slop-purple);
+  text-align: left;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  cursor: pointer;
+}
+
+.lineage-status-panel {
+  position: absolute;
+  z-index: 29;
+  top: 100%;
+  left: 10px;
+  width: min(520px, calc(100vw - 20px));
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(157,77,255,.3);
+  background: rgba(6,4,10,.98);
+  box-shadow: 0 14px 34px rgba(0,0,0,.5), 0 0 20px rgba(157,77,255,.06);
+  color: #8d8498;
+  font-size: 8px;
+}
+
+.lineage-status-panel strong { color: var(--slop-purple); }
+.lineage-status-panel span { color: #a39aac; }
+.lineage-status-panel p { margin: 3px 0; color: #b9b0c2; line-height: 1.45; }
+.lineage-status-panel small { color: #756d7d; font-size: 7px; }
+
+.fork-result-card {
+  width: min(680px, 96%);
+  margin: 16px 0 22px;
+  padding: 14px;
+  border: 1px solid rgba(61,124,255,.34);
+  background: linear-gradient(135deg, rgba(61,124,255,.055), rgba(157,77,255,.035));
+  box-shadow: 0 0 24px rgba(61,124,255,.06);
+}
+
+.fork-result-card > span {
+  display: block;
+  color: var(--slop-blue);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.fork-result-card > strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--slop-white);
+  font-size: 13px;
+}
+
+.fork-result-card > p {
+  margin: 7px 0 0;
+  color: #aaa1b4;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.fork-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.fork-result-actions button {
+  border: 1px solid rgba(61,124,255,.32);
+  background: rgba(0,0,0,.28);
+  color: var(--slop-blue);
+  padding: 8px 10px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  cursor: pointer;
+}
+
+.fork-result-actions button:last-child {
+  border-color: rgba(255,255,255,.1);
+  color: #817989;
+}
+
 .slop-chat-log {
   flex: 1;
   min-height: 0;
