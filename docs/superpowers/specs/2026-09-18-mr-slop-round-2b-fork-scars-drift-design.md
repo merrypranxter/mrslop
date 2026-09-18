@@ -4,7 +4,7 @@ Date: 2026-09-18
 
 ## Status
 
-Approved conversational design, pending final written-spec review before implementation planning.
+Conversational design approved. Written design self-reviewed and pending final user approval before implementation planning.
 
 ## 1. Purpose
 
@@ -180,6 +180,25 @@ This means:
 
 The lineage record still preserves parent and root ancestry so future features can calculate ancestral drift separately.
 
+### 6.3 Drift baseline record
+
+Round 2B should persist a dedicated immutable drift baseline rather than trying to reconstruct it from mutable current state later.
+
+Minimum baseline fields:
+
+- `capturedAt`
+- `source`: `native-v3` | `fork-v3` | `migrated-v2`
+- genome snapshot used as the lifetime comparison baseline
+- active trait snapshots/IDs present at baseline
+- active infection snapshots/IDs present at baseline
+- inherited scar IDs present at baseline
+
+For native-v3 roots, the baseline is captured at normal specimen birth.
+
+For fork-v3 children, the baseline is captured after child-local inherited IDs have been created, so the child's own inherited trait/infection/scar IDs are the zero-drift baseline.
+
+For migrated-v2 specimens, the baseline is conservative and explicitly marked imperfect as described in Section 22.
+
 ## 7. Lineage model
 
 Each specimen should receive a structured lineage record.
@@ -253,7 +272,8 @@ Each scar should record at minimum:
 - `origin`: experienced | inherited
 - `createdAt`
 - `sourceSpecimenId`
-- `sourceScarId` when inherited
+- `sourceScarId` when inherited from an existing parent scar
+- `inheritedAt` when origin is inherited
 - related life-history event IDs
 - related mutation/trait/infection/checkpoint IDs where applicable
 - related message/artifact IDs where factual provenance exists
@@ -272,6 +292,8 @@ Round 2B should automatically create scars for a narrow set of meaningful struct
 - a checkpoint restore that removes or reverses a previously lasting state,
 - a real current-genome mutation,
 - birth from a fork.
+
+The fork-birth scar is a special ancestry scar: it uses `origin: inherited`, references the parent specimen, is created as part of the child's birth state, and is included in the child's drift baseline. It therefore does **not** increase the child's lifetime drift at birth.
 
 Other events may become scars later through explicit user/Mr. Slop proposal, but Round 2B should avoid over-scarification.
 
@@ -367,23 +389,29 @@ Temporary mutation history contributes less than persistent trait/genome change.
 
 ## 12. Drift score and bands
 
-The application may compute a deterministic internal drift index for:
+Round 2B uses a deterministic internal drift index for sorting, comparison, future breeding, and stable band assignment.
 
-- sorting,
-- comparison,
-- future breeding,
-- and stable band assignment.
+The initial scoring formula is deliberately simple and application-owned:
 
-The weighting must be explicit in code and covered by tests.
+- each enabled genome component added or removed relative to baseline: **+4**
+- STACK/FUSE mode change relative to baseline: **+3**
+- custom-seed presence/value change relative to baseline: **+2**
+- each active acquired trait created after baseline: **+3**
+- each trait retired after baseline: **+2**
+- each distinct infection started after baseline: **+1**, capped at **+4**
+- each experienced scar created after baseline: **+1**, capped at **+4**
+- each checkpoint restore after baseline: **+1**, capped at **+3**
 
-The UI should not present the index as a scientific measurement.
+Inherited traits, inherited infections, inherited scars, generation depth, and the fork-birth scar contribute **0** to lifetime drift at birth because they are part of the child's baseline.
 
-User-facing bands:
+The score is not displayed as a scientific measurement. It exists only to make category assignment reproducible and comparable.
 
-- **LOW**
-- **MODERATE**
-- **HIGH**
-- **EXTREME**
+Initial user-facing bands:
+
+- **LOW**: score 0–2
+- **MODERATE**: score 3–7
+- **HIGH**: score 8–14
+- **EXTREME**: score 15 or greater
 
 The displayed drift explanation must include the factual reasons behind the band.
 
@@ -585,30 +613,30 @@ Migration must not fabricate certainty.
 
 For migrated pre-Round-2B specimens:
 
-- birth genome comes from the existing immutable `birthGenome`,
-- birth traits/infections default to the minimal reconstructable state,
-- lineage marks them as migrated roots,
-- drift explanations should avoid claiming exact pre-2B lifetime chronology where the old schema cannot prove it.
+- the genome comparison baseline uses the existing immutable `birthGenome`,
+- currently active traits at migration are captured as baseline traits rather than being falsely labeled post-baseline acquisitions,
+- currently active infections at migration are captured as baseline infections with their existing remaining duration,
+- existing placeholder scars are not converted into factual scars unless the old record already contains enough structured evidence to do so safely,
+- lineage marks the specimen as a generation-0 migrated root,
+- the drift baseline source is `migrated-v2`,
+- drift explanations may describe current genome differences from the original birth genome, but must not claim exact pre-2B trait/infection chronology that the old schema cannot prove.
 
-The implementation may mark the baseline with a quality/source field such as:
-
-- `native-v3`
-- `migrated-v2`
-
-This allows technically honest drift summaries.
+This deliberately under-claims historical drift rather than fabricating it. Future changes after migration are tracked exactly.
 
 ## 23. Error and transaction behavior
 
 Fork creation must be transactional from the user's point of view.
 
+The fork engine should first construct both results in memory: a child specimen and a parent copy containing the corresponding `specimen-forked` event. The caller then persists the updated specimen collection in one storage write before either in-memory specimen is treated as committed.
+
 If child creation or persistence fails:
 
-- parent remains unchanged,
+- the active parent remains unchanged,
 - no false `specimen-forked` success event is committed,
 - no child is shown as created,
 - the user can retry.
 
-If the child is successfully persisted but UI navigation fails, the child still exists in saved specimens.
+If persistence succeeds but UI navigation fails, both the child and the parent's fork event already exist in saved specimens.
 
 Scar creation and drift calculation must not make model calls and should not block ordinary chat.
 
@@ -648,7 +676,7 @@ A forked FUSE specimen copies the parent's current persisted compiled kernel as 
 12. Scars never alter runtime prompt behavior by themselves.
 13. Checkpoint restore never erases scars or life-history evidence.
 14. Lifetime drift compares against the specimen's own birth baseline.
-15. Forked children begin at zero lifetime drift.
+15. Forked children begin at zero lifetime drift, including their fork-birth ancestry scar.
 16. Generation is lineage context, not lifetime-drift weight.
 17. Drift uses application-owned state only.
 18. Drift UI explains its dimensions.
