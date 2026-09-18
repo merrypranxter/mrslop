@@ -482,6 +482,7 @@ export interface PetriEntrantAttempt {
   errorCode?: string;
   errorMessage?: string;
   systemInstructionHash: string;
+  systemInstruction?: string;
   challengeHash: string;
   entrantStateHash: string;
 }
