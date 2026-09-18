@@ -15,6 +15,7 @@ import { SLOP_LIBRARY } from '../data/slopLibrary';
 import { buildCatalogIndex } from '../lib/catalog';
 import { createGenome } from '../lib/genome';
 import { assembleSystemInstruction } from '../lib/kernel';
+import { addGenomeChangeScar } from '../lib/scars';
 import {
   acquireTrait,
   advanceSuccessfulTurn,
@@ -35,6 +36,7 @@ import {
   ChoiceCardEvent,
   ChoiceCardOption,
   Genome,
+  LifeHistoryEvent,
   Message,
   MutationActionRequest,
   MutationProposal,
@@ -621,12 +623,37 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           compilerVersion: MR_SLOP_FUSE_VERSION,
         };
       }
-      const updated: Specimen = {
+      const changedAt = Date.now();
+      let updated: Specimen = {
         ...checkpointed,
         currentGenome: snapshotGenome(genome),
         phase: 'spawned',
-        lastModified: Date.now(),
+        lastModified: changedAt,
       };
+
+      if (checkpointed.currentGenome.id !== genome.id) {
+        const genomeEvent: LifeHistoryEvent = {
+          id: crypto.randomUUID(),
+          type: 'genome-mutated',
+          summary: `Genome changed from ${checkpointed.currentGenome.id} to ${genome.id}.`,
+          mutationId: genome.id,
+          messageIds: [],
+          artifactIds: [],
+          createdAt: changedAt,
+        };
+        updated = {
+          ...updated,
+          lifeHistory: [...updated.lifeHistory, genomeEvent],
+        };
+        updated = addGenomeChangeScar(
+          updated,
+          checkpointed.currentGenome.id,
+          genome.id,
+          genomeEvent.id,
+          changedAt,
+        );
+      }
+
       commit(updated);
       setActiveDecision(null);
     } catch {
