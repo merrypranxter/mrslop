@@ -143,6 +143,21 @@ export interface MutationProposal {
   sourceType: MutationSourceType;
 }
 
+export interface MutationActionRequest {
+  type:
+    | 'start-infection'
+    | 'promote-infection'
+    | 'remove-infection'
+    | 'acquire-trait'
+    | 'retire-trait'
+    | 'fossilize-accident'
+    | 'restore-checkpoint';
+  targetId?: string;
+  proposal?: MutationProposal;
+  durationMode?: InfectionDurationMode;
+  durationTurns?: number;
+}
+
 export interface Checkpoint {
   id: string;
   reason: string;
@@ -207,6 +222,8 @@ export interface MrSlopResponseEnvelope {
     mode: GenomeMode;
     customSeed?: string;
   };
+  mutationProposal?: MutationProposal;
+  mutationAction?: MutationActionRequest;
 }
 
 export enum VisualType {
