@@ -3,10 +3,14 @@ import {
   AcquiredTrait,
   Artifact,
   Checkpoint,
+  DriftBaseline,
   Genome,
   Infection,
+  InheritanceRef,
   LifeHistoryEvent,
+  LineageRecord,
   MutationProvenance,
+  Scar,
   Specimen,
   SpecimenPhase,
 } from '../types';
@@ -48,6 +52,28 @@ interface LegacyV1Specimen {
   lastModified: number;
 }
 
+interface LegacyV2Specimen {
+  schemaVersion: 2;
+  id: string;
+  name: string;
+  phase: SpecimenPhase;
+  birthGenome: Genome;
+  currentGenome: Genome;
+  messages: Specimen['messages'];
+  artifacts: Artifact[];
+  checkpoints: Checkpoint[];
+  acquiredTraits: AcquiredTrait[];
+  infections: Infection[];
+  lifeHistory: LifeHistoryEvent[];
+  scars: unknown[];
+  trajectory: unknown | null;
+  controllerState: unknown | null;
+  metrics: unknown | null;
+  lineage: unknown | null;
+  createdAt: number;
+  lastModified: number;
+}
+
 const cloneGenomeSnapshot = (genome: Genome): Genome => ({
   ...genome,
   components: genome.components.map(component => ({
@@ -56,6 +82,9 @@ const cloneGenomeSnapshot = (genome: Genome): Genome => ({
     roleHints: [...component.roleHints],
   })),
 });
+
+const cloneInheritanceRef = (ref: InheritanceRef | undefined): InheritanceRef | undefined =>
+  ref ? { ...ref } : undefined;
 
 const cloneProvenance = (provenance: MutationProvenance): MutationProvenance => ({
   ...provenance,
@@ -66,11 +95,13 @@ const cloneProvenance = (provenance: MutationProvenance): MutationProvenance => 
 const cloneTraits = (traits: AcquiredTrait[]): AcquiredTrait[] => traits.map(trait => ({
   ...trait,
   provenance: cloneProvenance(trait.provenance),
+  ...(trait.inheritedFrom ? { inheritedFrom: cloneInheritanceRef(trait.inheritedFrom) } : {}),
 }));
 
 const cloneInfections = (infections: Infection[]): Infection[] => infections.map(infection => ({
   ...infection,
   provenance: cloneProvenance(infection.provenance),
+  ...(infection.inheritedFrom ? { inheritedFrom: cloneInheritanceRef(infection.inheritedFrom) } : {}),
 }));
 
 const cloneLifeHistory = (history: LifeHistoryEvent[]): LifeHistoryEvent[] => history.map(event => ({
@@ -86,24 +117,54 @@ const cloneCheckpoint = (checkpoint: Checkpoint): Checkpoint => ({
   infections: cloneInfections(checkpoint.infections),
 });
 
+const cloneScar = (scar: Scar): Scar => ({
+  ...scar,
+  relatedEventIds: [...scar.relatedEventIds],
+  relatedMutationIds: [...scar.relatedMutationIds],
+  relatedCheckpointIds: [...scar.relatedCheckpointIds],
+  messageIds: [...scar.messageIds],
+  artifactIds: [...scar.artifactIds],
+});
+
+const cloneBaseline = (baseline: DriftBaseline): DriftBaseline => ({
+  ...baseline,
+  genome: cloneGenomeSnapshot(baseline.genome),
+  activeTraitIds: [...baseline.activeTraitIds],
+  activeInfectionIds: [...baseline.activeInfectionIds],
+  inheritedScarIds: [...baseline.inheritedScarIds],
+});
+
+const cloneLineage = (lineage: LineageRecord): LineageRecord => ({ ...lineage });
+
+const cloneMessages = (messages: Specimen['messages']): Specimen['messages'] =>
+  messages.map(message => ({
+    ...message,
+    attachments: message.attachments?.map(attachment => ({ ...attachment, fileHandle: undefined })),
+  }));
+
+const cloneArtifacts = (artifacts: Artifact[]): Artifact[] =>
+  artifacts.map(artifact => ({ ...artifact, componentIds: [...artifact.componentIds] }));
+
 const cloneSpecimenForStorage = (specimen: Specimen): Specimen => ({
   ...specimen,
   birthGenome: cloneGenomeSnapshot(specimen.birthGenome),
   currentGenome: cloneGenomeSnapshot(specimen.currentGenome),
-  messages: specimen.messages.map(message => ({
-    ...message,
-    attachments: message.attachments?.map(attachment => ({ ...attachment, fileHandle: undefined })),
-  })),
-  artifacts: specimen.artifacts.map(artifact => ({ ...artifact, componentIds: [...artifact.componentIds] })),
+  messages: cloneMessages(specimen.messages),
+  artifacts: cloneArtifacts(specimen.artifacts),
   checkpoints: specimen.checkpoints.map(cloneCheckpoint),
   acquiredTraits: cloneTraits(specimen.acquiredTraits),
   infections: cloneInfections(specimen.infections),
   lifeHistory: cloneLifeHistory(specimen.lifeHistory),
-  scars: [...specimen.scars],
+  scars: specimen.scars.map(cloneScar),
+  birthBaseline: cloneBaseline(specimen.birthBaseline),
+  lineage: cloneLineage(specimen.lineage),
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object';
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(item => typeof item === 'string');
 
 const isGenomeLike = (value: unknown): value is Genome => {
   if (!isRecord(value)) return false;
@@ -126,15 +187,20 @@ const hasBaseSpecimenShape = (value: Record<string, unknown>): boolean =>
   typeof value.createdAt === 'number' &&
   typeof value.lastModified === 'number';
 
+const isInheritanceRef = (value: unknown): value is InheritanceRef => {
+  if (!isRecord(value)) return false;
+  return typeof value.specimenId === 'string' &&
+    typeof value.recordId === 'string' &&
+    typeof value.inheritedAt === 'number';
+};
+
 const isMutationProvenance = (value: unknown): value is MutationProvenance => {
   if (!isRecord(value)) return false;
   return typeof value.specimenId === 'string' &&
     typeof value.genomeId === 'string' &&
     ['user', 'mr-slop', 'artifact', 'conversation', 'mutation-proposal'].includes(String(value.sourceType)) &&
-    Array.isArray(value.sourceMessageIds) &&
-    value.sourceMessageIds.every(item => typeof item === 'string') &&
-    Array.isArray(value.sourceArtifactIds) &&
-    value.sourceArtifactIds.every(item => typeof item === 'string');
+    isStringArray(value.sourceMessageIds) &&
+    isStringArray(value.sourceArtifactIds);
 };
 
 const isAcquiredTrait = (value: unknown): value is AcquiredTrait => {
@@ -146,6 +212,7 @@ const isAcquiredTrait = (value: unknown): value is AcquiredTrait => {
     (value.status === 'active' || value.status === 'retired') &&
     ['explicit', 'promoted-infection', 'fossilized-accident', 'mr-slop-proposal'].includes(String(value.originType)) &&
     isMutationProvenance(value.provenance) &&
+    (value.inheritedFrom === undefined || isInheritanceRef(value.inheritedFrom)) &&
     typeof value.createdAt === 'number';
 };
 
@@ -158,6 +225,7 @@ const isInfection = (value: unknown): value is Infection => {
     ['active', 'expired', 'removed', 'promoted'].includes(String(value.status)) &&
     (value.durationMode === 'turns' || value.durationMode === 'indefinite') &&
     isMutationProvenance(value.provenance) &&
+    (value.inheritedFrom === undefined || isInheritanceRef(value.inheritedFrom)) &&
     typeof value.createdAt === 'number';
 };
 
@@ -166,14 +234,12 @@ const isLifeHistoryEvent = (value: unknown): value is LifeHistoryEvent => {
   return typeof value.id === 'string' &&
     typeof value.type === 'string' &&
     typeof value.summary === 'string' &&
-    Array.isArray(value.messageIds) &&
-    value.messageIds.every(item => typeof item === 'string') &&
-    Array.isArray(value.artifactIds) &&
-    value.artifactIds.every(item => typeof item === 'string') &&
+    isStringArray(value.messageIds) &&
+    isStringArray(value.artifactIds) &&
     typeof value.createdAt === 'number';
 };
 
-const isCheckpointV2 = (value: unknown): value is Checkpoint => {
+const isCheckpoint = (value: unknown): value is Checkpoint => {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string' &&
     typeof value.reason === 'string' &&
@@ -185,16 +251,74 @@ const isCheckpointV2 = (value: unknown): value is Checkpoint => {
     typeof value.createdAt === 'number';
 };
 
-const isValidV2Specimen = (value: unknown): value is Specimen => {
-  if (!isRecord(value) || value.schemaVersion !== 2 || !hasBaseSpecimenShape(value)) return false;
-  if (!Array.isArray(value.infections) ||
-      !Array.isArray(value.acquiredTraits) ||
-      !Array.isArray(value.lifeHistory) ||
-      !Array.isArray(value.checkpoints)) return false;
-  return value.infections.every(isInfection) &&
+const isScar = (value: unknown): value is Scar => {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.description === 'string' &&
+    ['infection-survived', 'infection-promoted', 'fossilized-accident', 'checkpoint-reversion', 'genome-change', 'fork-birth']
+      .includes(String(value.kind)) &&
+    (value.origin === 'experienced' || value.origin === 'inherited') &&
+    typeof value.createdAt === 'number' &&
+    (value.sourceSpecimenId === undefined || typeof value.sourceSpecimenId === 'string') &&
+    (value.sourceScarId === undefined || typeof value.sourceScarId === 'string') &&
+    (value.inheritedAt === undefined || typeof value.inheritedAt === 'number') &&
+    isStringArray(value.relatedEventIds) &&
+    isStringArray(value.relatedMutationIds) &&
+    isStringArray(value.relatedCheckpointIds) &&
+    isStringArray(value.messageIds) &&
+    isStringArray(value.artifactIds);
+};
+
+const isLineageRecord = (value: unknown): value is LineageRecord => {
+  if (!isRecord(value)) return false;
+  return typeof value.rootSpecimenId === 'string' &&
+    (value.parentSpecimenId === null || typeof value.parentSpecimenId === 'string') &&
+    Number.isInteger(value.generation) &&
+    Number(value.generation) >= 0 &&
+    ['native-v3', 'fork-v3', 'migrated-v2'].includes(String(value.source)) &&
+    (value.forkedAt === undefined || typeof value.forkedAt === 'number') &&
+    (value.forkSourceEventId === undefined || typeof value.forkSourceEventId === 'string') &&
+    (value.forkSourceCheckpointId === undefined || typeof value.forkSourceCheckpointId === 'string') &&
+    (value.forkSourceGenomeId === undefined || typeof value.forkSourceGenomeId === 'string');
+};
+
+const isDriftBaseline = (value: unknown): value is DriftBaseline => {
+  if (!isRecord(value)) return false;
+  return typeof value.capturedAt === 'number' &&
+    ['native-v3', 'fork-v3', 'migrated-v2'].includes(String(value.source)) &&
+    isGenomeLike(value.genome) &&
+    isStringArray(value.activeTraitIds) &&
+    isStringArray(value.activeInfectionIds) &&
+    isStringArray(value.inheritedScarIds);
+};
+
+const isValidV3Specimen = (value: unknown): value is Specimen => {
+  if (!isRecord(value) || value.schemaVersion !== 3 || !hasBaseSpecimenShape(value)) return false;
+  return Array.isArray(value.infections) &&
+    value.infections.every(isInfection) &&
+    Array.isArray(value.acquiredTraits) &&
     value.acquiredTraits.every(isAcquiredTrait) &&
+    Array.isArray(value.lifeHistory) &&
     value.lifeHistory.every(isLifeHistoryEvent) &&
-    value.checkpoints.every(isCheckpointV2);
+    Array.isArray(value.checkpoints) &&
+    value.checkpoints.every(isCheckpoint) &&
+    Array.isArray(value.scars) &&
+    value.scars.every(isScar) &&
+    isDriftBaseline(value.birthBaseline) &&
+    isLineageRecord(value.lineage);
+};
+
+const isValidV2Specimen = (value: unknown): value is LegacyV2Specimen => {
+  if (!isRecord(value) || value.schemaVersion !== 2 || !hasBaseSpecimenShape(value)) return false;
+  return Array.isArray(value.infections) &&
+    value.infections.every(isInfection) &&
+    Array.isArray(value.acquiredTraits) &&
+    value.acquiredTraits.every(isAcquiredTrait) &&
+    Array.isArray(value.lifeHistory) &&
+    value.lifeHistory.every(isLifeHistoryEvent) &&
+    Array.isArray(value.checkpoints) &&
+    value.checkpoints.every(isCheckpoint);
 };
 
 const isLegacyTrait = (value: unknown): value is LegacyAcquiredTrait => {
@@ -216,8 +340,10 @@ const isLegacyCheckpoint = (value: unknown): value is LegacyCheckpoint => {
 
 const isValidLegacyV1Specimen = (value: unknown): value is LegacyV1Specimen => {
   if (!isRecord(value) || value.schemaVersion !== 1 || !hasBaseSpecimenShape(value)) return false;
-  if (!Array.isArray(value.acquiredTraits) || !Array.isArray(value.checkpoints)) return false;
-  return value.acquiredTraits.every(isLegacyTrait) && value.checkpoints.every(isLegacyCheckpoint);
+  return Array.isArray(value.acquiredTraits) &&
+    value.acquiredTraits.every(isLegacyTrait) &&
+    Array.isArray(value.checkpoints) &&
+    value.checkpoints.every(isLegacyCheckpoint);
 };
 
 const migrateLegacyTrait = (
@@ -241,22 +367,87 @@ const migrateLegacyTrait = (
   createdAt: trait.createdAt,
 });
 
-export const migrateSpecimen = (value: unknown): Specimen | null => {
-  if (isValidV2Specimen(value)) return cloneSpecimenForStorage(value);
-  if (!isValidLegacyV1Specimen(value)) return null;
+export const captureBirthBaseline = (
+  specimen: Pick<Specimen, 'acquiredTraits' | 'infections' | 'scars'>,
+  genome: Genome,
+  source: DriftBaseline['source'],
+  capturedAt = Date.now(),
+): DriftBaseline => ({
+  capturedAt,
+  source,
+  genome: cloneGenomeSnapshot(genome),
+  activeTraitIds: specimen.acquiredTraits
+    .filter(trait => trait.status === 'active')
+    .map(trait => trait.id),
+  activeInfectionIds: specimen.infections
+    .filter(infection => infection.status === 'active')
+    .map(infection => infection.id),
+  inheritedScarIds: specimen.scars
+    .filter(scar => scar.origin === 'inherited')
+    .map(scar => scar.id),
+});
 
-  const migrated: Specimen = {
-    schemaVersion: 2,
+const migratedRootLineage = (specimenId: string): LineageRecord => ({
+  rootSpecimenId: specimenId,
+  parentSpecimenId: null,
+  generation: 0,
+  source: 'migrated-v2',
+});
+
+const migrateV2ToV3 = (value: LegacyV2Specimen): Specimen => {
+  const traits = cloneTraits(value.acquiredTraits);
+  const infections = cloneInfections(value.infections);
+  const now = Date.now();
+
+  const specimenShell = {
+    acquiredTraits: traits,
+    infections,
+    scars: [] as Scar[],
+  };
+
+  return cloneSpecimenForStorage({
+    schemaVersion: 3,
     id: value.id,
     name: value.name,
     phase: value.phase,
     birthGenome: cloneGenomeSnapshot(value.birthGenome),
     currentGenome: cloneGenomeSnapshot(value.currentGenome),
-    messages: value.messages.map(message => ({
-      ...message,
-      attachments: message.attachments?.map(attachment => ({ ...attachment, fileHandle: undefined })),
-    })),
-    artifacts: value.artifacts.map(artifact => ({ ...artifact, componentIds: [...artifact.componentIds] })),
+    messages: cloneMessages(value.messages),
+    artifacts: cloneArtifacts(value.artifacts),
+    checkpoints: value.checkpoints.map(cloneCheckpoint),
+    acquiredTraits: traits,
+    infections,
+    lifeHistory: cloneLifeHistory(value.lifeHistory),
+    scars: [],
+    birthBaseline: captureBirthBaseline(specimenShell, value.birthGenome, 'migrated-v2', now),
+    lineage: migratedRootLineage(value.id),
+    trajectory: value.trajectory,
+    controllerState: value.controllerState,
+    metrics: value.metrics,
+    createdAt: value.createdAt,
+    lastModified: value.lastModified,
+  });
+};
+
+const migrateV1ToV3 = (value: LegacyV1Specimen): Specimen => {
+  const traits = value.acquiredTraits.map(trait =>
+    migrateLegacyTrait(trait, value.id, value.currentGenome.id));
+  const now = Date.now();
+  const specimenShell = {
+    acquiredTraits: traits,
+    infections: [] as Infection[],
+    scars: [] as Scar[],
+  };
+
+  return cloneSpecimenForStorage({
+    schemaVersion: 3,
+    id: value.id,
+    name: value.name,
+    phase: value.phase,
+    birthGenome: cloneGenomeSnapshot(value.birthGenome),
+    currentGenome: cloneGenomeSnapshot(value.currentGenome),
+    messages: cloneMessages(value.messages),
+    artifacts: cloneArtifacts(value.artifacts),
     checkpoints: value.checkpoints.map(checkpoint => ({
       id: checkpoint.id,
       reason: checkpoint.reason,
@@ -265,20 +456,25 @@ export const migrateSpecimen = (value: unknown): Specimen | null => {
       infections: [],
       createdAt: checkpoint.createdAt,
     })),
-    acquiredTraits: value.acquiredTraits.map(trait =>
-      migrateLegacyTrait(trait, value.id, value.currentGenome.id)),
+    acquiredTraits: traits,
     infections: [],
     lifeHistory: [],
-    scars: [...value.scars],
+    scars: [],
+    birthBaseline: captureBirthBaseline(specimenShell, value.birthGenome, 'migrated-v2', now),
+    lineage: migratedRootLineage(value.id),
     trajectory: value.trajectory,
     controllerState: value.controllerState,
     metrics: value.metrics,
-    lineage: value.lineage,
     createdAt: value.createdAt,
     lastModified: value.lastModified,
-  };
+  });
+};
 
-  return cloneSpecimenForStorage(migrated);
+export const migrateSpecimen = (value: unknown): Specimen | null => {
+  if (isValidV3Specimen(value)) return cloneSpecimenForStorage(value);
+  if (isValidV2Specimen(value)) return migrateV2ToV3(value);
+  if (isValidLegacyV1Specimen(value)) return migrateV1ToV3(value);
+  return null;
 };
 
 export const loadSpecimens = async (): Promise<Specimen[]> => {
@@ -321,13 +517,27 @@ export const makeSpecimen = (
   const now = Date.now();
   const id = crypto.randomUUID();
   const specimenName = name.trim() || 'NEW SPECIMEN';
+  const birthGenome = cloneGenomeSnapshot(genome);
+  const currentGenome = cloneGenomeSnapshot(genome);
+  const lineage: LineageRecord = {
+    rootSpecimenId: id,
+    parentSpecimenId: null,
+    generation: 0,
+    source: 'native-v3',
+  };
+  const specimenShell = {
+    acquiredTraits: [] as AcquiredTrait[],
+    infections: [] as Infection[],
+    scars: [] as Scar[],
+  };
+
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id,
     name: specimenName,
     phase: phase ?? (genome.components.length === 0 ? 'building' : 'spawned'),
-    birthGenome: cloneGenomeSnapshot(genome),
-    currentGenome: cloneGenomeSnapshot(genome),
+    birthGenome,
+    currentGenome,
     messages: [],
     artifacts: [],
     checkpoints: [],
@@ -342,10 +552,11 @@ export const makeSpecimen = (
       createdAt: now,
     }],
     scars: [],
+    birthBaseline: captureBirthBaseline(specimenShell, birthGenome, 'native-v3', now),
+    lineage,
     trajectory: null,
     controllerState: null,
     metrics: null,
-    lineage: null,
     createdAt: now,
     lastModified: now,
   };
