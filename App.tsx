@@ -15,6 +15,7 @@ import type { BreedingPreview } from './lib/breeding';
 import { commitBreedingPreview } from './lib/breedingPersistence';
 import { createGenome, selectSurpriseComponents } from './lib/genome';
 import { forkSpecimen, nextForkName } from './lib/lineage';
+import { resolvePetriBreedingPair, resolvePetriLiveSpecimen } from './lib/petriActions';
 import { applyPetriSelection } from './lib/petriSelection';
 import { createPetriEntrantSnapshot } from './lib/petriSnapshot';
 import {
@@ -156,10 +157,11 @@ function App() {
     }
   };
 
-  const persistFork = async (suggestedName?: string): Promise<Specimen> => {
-    if (!activeSpecimen) throw new Error('NO_ACTIVE_SPECIMEN');
-
-    const source = specimensRef.current.find(item => item.id === activeSpecimen.id);
+  const persistForkFrom = async (
+    sourceId: string,
+    suggestedName?: string,
+  ): Promise<Specimen> => {
+    const source = specimensRef.current.find(item => item.id === sourceId);
     if (!source) throw new Error('PARENT_SPECIMEN_NOT_FOUND');
 
     const childName = suggestedName?.trim() || nextForkName(source, specimensRef.current);
@@ -173,8 +175,13 @@ function App() {
 
     specimensRef.current = nextList;
     setSpecimens(nextList);
-    setActiveSpecimen(parent);
+    if (activeSpecimen?.id === parent.id) setActiveSpecimen(parent);
     return child;
+  };
+
+  const persistFork = async (suggestedName?: string): Promise<Specimen> => {
+    if (!activeSpecimen) throw new Error('NO_ACTIVE_SPECIMEN');
+    return persistForkFrom(activeSpecimen.id, suggestedName);
   };
 
 
@@ -302,6 +309,70 @@ function App() {
       setBreedingPreview(preview);
     } catch {
       setAppError('Mr. Slop could not build that offspring preview.');
+    }
+  };
+
+  const openPetriEntrant = (entrantSnapshotId: string) => {
+    if (!activePetriTrial) return;
+    try {
+      const live = resolvePetriLiveSpecimen(
+        activePetriTrial,
+        entrantSnapshotId,
+        specimensRef.current,
+      );
+      setActivePetriTrial(null);
+      setPetriHistoricalView(false);
+      openSpecimen(live);
+    } catch {
+      setAppError('That selected specimen is no longer available.');
+    }
+  };
+
+  const forkPetriEntrant = async (entrantSnapshotId: string) => {
+    if (!activePetriTrial) return;
+    try {
+      const live = resolvePetriLiveSpecimen(
+        activePetriTrial,
+        entrantSnapshotId,
+        specimensRef.current,
+      );
+      const child = await persistForkFrom(live.id);
+      setActivePetriTrial(null);
+      setPetriHistoricalView(false);
+      openSpecimen(child);
+    } catch {
+      setAppError('That selected specimen could not be forked.');
+    }
+  };
+
+  const breedPetriSelected = (entrantSnapshotIds: string[]) => {
+    if (!activePetriTrial || entrantSnapshotIds.length !== 2) return;
+
+    const selectedTrial: PetriTrial = {
+      ...activePetriTrial,
+      selection: {
+        selectedEntrantSnapshotIds: [...entrantSnapshotIds],
+        identityMode: petriBlind ? 'blind' : 'revealed',
+        selectedAt: activePetriTrial.selection?.selectedAt ?? Date.now(),
+        ...(activePetriTrial.selection?.revisedAt
+          ? { revisedAt: activePetriTrial.selection.revisedAt }
+          : {}),
+      },
+    };
+
+    try {
+      const [parentA, parentB] = resolvePetriBreedingPair(
+        selectedTrial,
+        specimensRef.current,
+      );
+      setActivePetriTrial(null);
+      setPetriHistoricalView(false);
+      setShowBreeding(true);
+      setBreedingResult(null);
+      setBreedingError(null);
+      previewBreeding(parentA, parentB);
+    } catch {
+      setAppError('Those selected specimens are no longer available for breeding.');
     }
   };
 
@@ -487,6 +558,9 @@ function App() {
           onRetry={entrantId => void retryPetri(entrantId)}
           onAbort={() => petriAbortRef.current?.abort()}
           onSelectionChange={ids => void updatePetriSelection(ids)}
+          onOpenEntrant={openPetriEntrant}
+          onForkEntrant={entrantId => void forkPetriEntrant(entrantId)}
+          onBreedSelected={breedPetriSelected}
           onClose={() => {
             setActivePetriTrial(null);
             setPetriHistoricalView(false);
