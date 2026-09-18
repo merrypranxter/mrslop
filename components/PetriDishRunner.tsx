@@ -11,6 +11,9 @@ interface PetriDishRunnerProps {
   onRetry: (entrantSnapshotId: string) => void;
   onAbort: () => void;
   onSelectionChange: (entrantSnapshotIds: string[]) => void;
+  onOpenEntrant?: (entrantSnapshotId: string) => void;
+  onForkEntrant?: (entrantSnapshotId: string) => void;
+  onBreedSelected?: (entrantSnapshotIds: string[]) => void;
   onClose: () => void;
 }
 
@@ -23,6 +26,9 @@ const PetriDishRunner: React.FC<PetriDishRunnerProps> = ({
   onRetry,
   onAbort,
   onSelectionChange,
+  onOpenEntrant,
+  onForkEntrant,
+  onBreedSelected,
   onClose,
 }) => {
   const selected = new Set(trial.selection?.selectedEntrantSnapshotIds ?? []);
@@ -111,6 +117,24 @@ const PetriDishRunner: React.FC<PetriDishRunnerProps> = ({
                       SELECT
                     </label>
                   )}
+                  {selected.has(entrantId) && onOpenEntrant && (
+                    <button
+                      type="button"
+                      aria-label={`Open selected ${label}`}
+                      onClick={() => onOpenEntrant(entrantId)}
+                    >
+                      OPEN
+                    </button>
+                  )}
+                  {selected.has(entrantId) && onForkEntrant && (
+                    <button
+                      type="button"
+                      aria-label={`Fork selected ${label}`}
+                      onClick={() => onForkEntrant(entrantId)}
+                    >
+                      FORK
+                    </button>
+                  )}
                 </div>
               </article>
             );
@@ -118,6 +142,18 @@ const PetriDishRunner: React.FC<PetriDishRunnerProps> = ({
         </div>
 
         <div className="breeding-actions">
+          {selected.size === 2 && onBreedSelected && (
+            <button
+              type="button"
+              className="breeding-primary"
+              disabled={busy}
+              onClick={() => onBreedSelected(
+                trial.entrantOrder.filter(id => selected.has(id)),
+              )}
+            >
+              BREED SELECTED
+            </button>
+          )}
           <button type="button" disabled={busy} onClick={onClose}>CLOSE</button>
         </div>
       </section>
