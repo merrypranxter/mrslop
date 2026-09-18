@@ -87,7 +87,7 @@ Failed model turns keep the user message visible and leave genome/mutation state
 
 ## Saved specimens and artifacts
 
-Specimens are stored locally under the dedicated `mrslop_specimens_v1` storage key. The key name remains stable, while stored specimens now use **schema version 3**. Valid schema-v1 and schema-v2 Mr. Slop specimens migrate locally to schema v3. Existing messages, artifacts, genomes, checkpoints, mutation state, and Round 2A life history are preserved; opaque legacy scar placeholders are not converted into invented typed scars.
+Specimens are stored locally under the dedicated `mrslop_specimens_v1` storage key. The key name remains stable, while stored specimens now use **schema version 4**. Valid schema-v1, schema-v2, and schema-v3 Mr. Slop specimens migrate locally to schema v4. Existing messages, artifacts, genomes, checkpoints, mutation state, scars, birth baselines, life history, and one-parent fork ancestry are preserved. Migration does not invent missing ancestors or second parents.
 
 The application does not read, migrate, or delete old Ghost session storage.
 
@@ -139,6 +139,83 @@ Bands are **LOW 0–2**, **MODERATE 3–7**, **HIGH 8–14**, and **EXTREME 15+*
 
 Specimens migrated from Round 2A use a conservative baseline. Mr. Slop does not invent chronology that the older schema did not record.
 
+
+## Round 2C breeding and controlled freak genetics
+
+Round 2C adds deterministic **two-parent breeding** between existing spawned specimens. Breeding uses each parent's **current lived state** while keeping the calculation application-owned and inspectable.
+
+The human chooses both parents. Mr. Slop may show factual contrasts such as generation, enabled component count, active traits, and overlap, but it does not rank mates or assign compatibility scores.
+
+### Genome crossover
+
+Ordinary crossover uses only enabled components in the parents' current genomes. The child genome targets the unbiased average of the two enabled component counts and preserves the existing component kinds as breeding roles.
+
+- a component unique to one parent has crossover weight **1.0**;
+- a functionally identical component shared by both parents has weight **2.0**;
+- same-ID but functionally divergent snapshots are treated as mutually exclusive alleles;
+- parental unique contribution is repaired toward balance when the role structure permits it; and
+- final STACK order is deterministic from the parents' ordering information.
+
+The child is always born **STACK**. Parent FUSE kernels and parent custom-seed text do not cross the breeding boundary, and breeding never triggers FUSE compilation.
+
+### Trait inheritance
+
+Only active acquired traits enter trait genetics. Temporary infection records never cross breeding.
+
+Initial inheritance probabilities are:
+
+- ordinary active or already-inherited trait: **35%**;
+- promoted-infection trait: **45%**;
+- fossilized-accident trait: **55%**;
+- functionally identical trait present in both parents: **70%**; and
+- direct factual scar support: **+15 percentage points once**.
+
+At most three active traits survive inheritance. If more than three pass their rolls, the application keeps the three strongest normalized passes and records the displaced candidates in the genetics receipt.
+
+A child inherits the behavior but not the parent's lifecycle claim. A fossilized or promoted parent trait becomes a child-local active trait with origin `inherited` and factual source ancestry. Parent scars are not copied into bred children.
+
+### Birth mutation
+
+After ordinary inheritance, a deterministic **1-in-8** birth-mutation roll occurs. At most one birth mutation can happen.
+
+The preferred branch is chosen 50/50:
+
+- add one pinned canonical library component absent from both parents' complete current genomes and from the child; or
+- apply one registered deterministic application-owned variation to an inherited trait.
+
+If the preferred branch has no valid target, the engine tries the other branch. If neither is valid, the receipt records a triggered no-op rather than inventing a mystery gene.
+
+### GENETICS RECEIPT and replay
+
+Every offspring preview contains an application-owned **GENETICS RECEIPT** recording the breeding seed, algorithm version, parent-state hashes, component candidates and weights, trait probabilities and rolls, scar support, cap displacement, mutation decision, and final birth state.
+
+Breeding uses namespaced deterministic random decisions instead of a fragile sequential random stream. The determinism contract is:
+
+> same breeding-relevant parent states + same seed + same genetics algorithm version = same genetic result.
+
+Receipts can be replay-verified against the parent states that created them.
+
+### Preview, stale-state protection, and persistence
+
+Breeding is preview-first. **THIS CREATES OFFSPRING** shows the exact proposed child before any write occurs.
+
+Approval rechecks both parents' breeding-state hashes. If breeding-relevant state changed, the preview is rejected as stale rather than silently creating a different child. Conversation messages, artifacts, and previous offspring-history events do not invalidate a preview because they are outside the breeding calculation.
+
+Successful approval writes both parent offspring-history records plus the child in one collection save. The approved preview has an idempotency key, so a duplicate submit cannot accidentally create identical twins. Intentionally breeding the same pair again uses a new seed and may create a different sibling.
+
+A bred child starts with:
+
+- true two-parent schema-v4 lineage;
+- generation `max(parent generations) + 1`;
+- fresh conversation/history;
+- no copied parent infections, scars, artifacts, or checkpoints;
+- its own STACK birth/current genome;
+- inherited child-local traits;
+- its persisted genetics receipt; and
+- **lifetime drift 0** from its complete birth state.
+
+Breeding itself makes **zero Gemini calls**.
+
 ## Gemini / Google AI Studio
 
 Gemini calls are server-side. The browser posts to Mr. Slop's same-origin API routes:
@@ -180,11 +257,12 @@ The important separation is:
 1. **Mr. Slop shell** — stable conversational identity and application-control contract.
 2. **Specimen genome** — current selected mechanisms, STACK/FUSE state, and optional custom seed.
 3. **Mutation layer** — acquired traits plus active temporary infections, applied at runtime.
-4. **Lineage/history state** — parent/root lineage, birth baseline, typed scars, and append-only life-history evidence.
-5. **Deterministic drift layer** — explainable lifetime distance from this specimen's own birth baseline, computed without model calls.
-6. **Software state** — messages, checkpoints, artifacts, persistence, and controller/trajectory placeholders.
-7. **Server transport** — Gemini generation and one-time FUSE compilation without exposing the API key to the client.
+4. **Lineage/history state** — schema-v4 root/fork/bred lineage, birth baseline, typed scars, offspring history, and append-only life-history evidence.
+5. **Deterministic genetics layer** — breeding-state hashes, seeded crossover, trait inheritance, birth mutation, and replayable genetics receipts without model calls.
+6. **Deterministic drift layer** — explainable lifetime distance from this specimen's own birth baseline, computed without model calls.
+7. **Software state** — messages, checkpoints, artifacts, persistence, and controller/trajectory placeholders.
+8. **Server transport** — Gemini generation and one-time FUSE compilation without exposing the API key to the client.
 
-## Round 2B non-goals
+## Round 2C non-goals
 
-Round 2B deliberately does **not** implement breeding or two-parent inheritance, a full family-tree visualization, Petri-dish tournaments, dormant trigger ecology, Semantic Manifold/SRE/TOPOS integration, external controllers, or cloud sync. Lineage, scars, and drift now provide factual substrate for those later experiments without pretending deferred systems already exist.
+Round 2C deliberately does **not** implement automatic mate ranking, compatibility scoring, chromosome simulation, dominant/recessive genes, population ecology, Petri-dish tournaments, automatic selective breeding, a full family-tree visualization, artifact/infection/scar copying across bred births, model-generated mystery genes, Semantic Manifold/SRE/TOPOS integration, external controllers, or cloud sync. The genetics system remains explicit application state rather than a claim about model weights, hidden states, or latent DNA.
