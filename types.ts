@@ -301,14 +301,17 @@ export interface GeneticsMutationReceipt {
   triggerRoll: number;
   threshold: number;
   triggered: boolean;
+  branchRoll?: number;
   preferredBranch?: 'canonical-component' | 'trait-variation';
   attemptedBranches: Array<'canonical-component' | 'trait-variation'>;
   outcome: 'none' | 'canonical-component' | 'trait-variation' | 'no-valid-candidate';
+  canonicalCandidateIds?: string[];
   componentId?: string;
   sourceTraitFingerprint?: string;
   mutatorId?: string;
   mutatorVersion?: string;
   fallbackUsed?: boolean;
+  noOpReason?: string;
 }
 
 export interface GeneticsGenomeReceipt {
