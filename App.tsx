@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import BuildMeScreen, { BuildRoute } from './components/BuildMeScreen';
 import MrSlopTerminal from './components/MrSlopTerminal';
 import PartPicker from './components/PartPicker';
 import SpecimenSidebar from './components/SpecimenSidebar';
 import { SLOP_LIBRARY } from './data/slopLibrary';
 import { createGenome, selectSurpriseComponents } from './lib/genome';
+import { forkSpecimen, nextForkName } from './lib/lineage';
 import { compileFuseGenome, MR_SLOP_FUSE_VERSION } from './services/kernelCompiler';
 import { loadSpecimens, makeSpecimen, saveSpecimens } from './services/specimenStore';
 import { GenomeMode, Specimen } from './types';
@@ -120,6 +121,27 @@ function App() {
     }
   };
 
+  const persistFork = async (suggestedName?: string): Promise<Specimen> => {
+    if (!activeSpecimen) throw new Error('NO_ACTIVE_SPECIMEN');
+
+    const source = specimensRef.current.find(item => item.id === activeSpecimen.id);
+    if (!source) throw new Error('PARENT_SPECIMEN_NOT_FOUND');
+
+    const childName = suggestedName?.trim() || nextForkName(source, specimensRef.current);
+    const { parent, child } = forkSpecimen(source, childName);
+    const nextList = [
+      ...specimensRef.current.map(item => item.id === parent.id ? parent : item),
+      child,
+    ];
+
+    await saveSpecimens(nextList);
+
+    specimensRef.current = nextList;
+    setSpecimens(nextList);
+    setActiveSpecimen(parent);
+    return child;
+  };
+
   const openSpecimen = (specimen: Specimen) => {
     setActiveSpecimen(specimen);
     setScreen('chat');
@@ -135,6 +157,11 @@ function App() {
       setScreen('build');
     }
   };
+
+  const specimenNames = useMemo(
+    () => Object.fromEntries(specimens.map(specimen => [specimen.id, specimen.name])),
+    [specimens],
+  );
 
   const startAnother = () => {
     setShowSpecimens(false);
@@ -174,6 +201,9 @@ function App() {
             onChange={persistSpecimen}
             onOpenSpecimens={() => setShowSpecimens(true)}
             onNewSpecimen={startAnother}
+            onForkSpecimen={persistFork}
+            onOpenSpecimen={openSpecimen}
+            specimenNames={specimenNames}
           />
         ) : (
           <BuildMeScreen specimenCount={specimens.length} onChoose={route => void handleRoute(route)} />
