@@ -12,6 +12,11 @@ export type InfectionDuration =
   | { mode: 'turns'; turns: number }
   | { mode: 'indefinite' };
 
+export const MAX_ACTIVE_INFECTIONS = 3;
+
+const byCreatedAtThenId = <T extends { createdAt: number; id: string }>(a: T, b: T): number =>
+  a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+
 const cloneProvenance = (provenance: MutationProvenance): MutationProvenance => ({
   ...provenance,
   sourceMessageIds: [...provenance.sourceMessageIds],
@@ -118,6 +123,10 @@ export const startInfection = (
   duration: InfectionDuration,
 ): Specimen => {
   requireProposalKind(proposal, 'infection');
+
+  if (specimen.infections.filter(item => item.status === 'active').length >= MAX_ACTIVE_INFECTIONS) {
+    throw new Error('ACTIVE_INFECTION_LIMIT');
+  }
 
   const now = Date.now();
   const infection: Infection = {
@@ -352,12 +361,14 @@ export const fossilizeAccident = (
 export const activeInfections = (specimen: Specimen): Infection[] =>
   specimen.infections
     .filter(infection => infection.status === 'active')
-    .map(cloneInfection);
+    .map(cloneInfection)
+    .sort(byCreatedAtThenId);
 
 export const activeTraits = (specimen: Specimen): AcquiredTrait[] =>
   specimen.acquiredTraits
     .filter(trait => trait.status === 'active')
-    .map(cloneTrait);
+    .map(cloneTrait)
+    .sort(byCreatedAtThenId);
 
 
 export const compileMutationRuntimeLayer = (
@@ -366,6 +377,8 @@ export const compileMutationRuntimeLayer = (
 ): string => {
   const activeTraitBlocks = traits
     .filter(trait => trait.status === 'active')
+    .map(cloneTrait)
+    .sort(byCreatedAtThenId)
     .map(trait => [
       `--- TRAIT ${trait.id} :: ${trait.name} ---`,
       trait.prompt,
@@ -374,6 +387,8 @@ export const compileMutationRuntimeLayer = (
 
   const activeInfectionBlocks = infections
     .filter(infection => infection.status === 'active')
+    .map(cloneInfection)
+    .sort(byCreatedAtThenId)
     .map(infection => {
       const durationLabel = infection.durationMode === 'indefinite'
         ? 'INDEFINITE'
