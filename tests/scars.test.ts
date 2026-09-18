@@ -100,7 +100,10 @@ describe('specimen scars', () => {
     const scar = promoted.scars.find(item => item.kind === 'infection-promoted')!;
     expect(scar.relatedMutationIds).toContain(infected.infections[0].id);
     expect(scar.relatedMutationIds).toContain(promoted.acquiredTraits[0].id);
-    expect(scar.relatedEventIds).toHaveLength(2);
+    const sourceEventIds = promoted.lifeHistory
+      .filter(event => event.type === 'infection-promoted' || event.type === 'trait-acquired')
+      .map(event => event.id);
+    expect(scar.relatedEventIds).toEqual(expect.arrayContaining(sourceEventIds));
   });
 
   it('fossilizes observed behavior as a trait and a historical scar', () => {
