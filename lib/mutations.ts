@@ -358,3 +358,43 @@ export const activeTraits = (specimen: Specimen): AcquiredTrait[] =>
   specimen.acquiredTraits
     .filter(trait => trait.status === 'active')
     .map(cloneTrait);
+
+
+export const compileMutationRuntimeLayer = (
+  traits: AcquiredTrait[],
+  infections: Infection[],
+): string => {
+  const activeTraitBlocks = traits
+    .filter(trait => trait.status === 'active')
+    .map(trait => [
+      `--- TRAIT ${trait.id} :: ${trait.name} ---`,
+      trait.prompt,
+      `--- END TRAIT ${trait.id} ---`,
+    ].join('\n'));
+
+  const activeInfectionBlocks = infections
+    .filter(infection => infection.status === 'active')
+    .map(infection => {
+      const durationLabel = infection.durationMode === 'indefinite'
+        ? 'INDEFINITE'
+        : `${infection.remainingTurns ?? infection.durationTurns ?? 0} TURNS REMAINING`;
+
+      return [
+        `--- INFECTION ${infection.id} :: ${infection.name} :: ${durationLabel} ---`,
+        infection.prompt,
+        `--- END INFECTION ${infection.id} ---`,
+      ].join('\n');
+    });
+
+  const layers: string[] = [];
+
+  if (activeTraitBlocks.length > 0) {
+    layers.push(`ACTIVE ACQUIRED TRAITS\n${activeTraitBlocks.join('\n\n')}`);
+  }
+
+  if (activeInfectionBlocks.length > 0) {
+    layers.push(`ACTIVE TEMPORARY INFECTIONS\n${activeInfectionBlocks.join('\n\n')}`);
+  }
+
+  return layers.join('\n\n');
+};
