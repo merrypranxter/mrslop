@@ -7,6 +7,7 @@ import {
   activeTraits,
   advanceSuccessfulTurn,
   fossilizeAccident,
+  MAX_ACTIVE_INFECTIONS,
   promoteInfection,
   removeInfection,
   retireTrait,
@@ -209,6 +210,141 @@ describe('mutation state engine', () => {
 
     expect(activeInfections(retired)).toEqual([]);
     expect(activeTraits(retired)).toEqual([]);
+  });
+
+  it('rejects a fourth active infection without changing the specimen', () => {
+    expect(MAX_ACTIVE_INFECTIONS).toBe(3);
+    let specimen = makeSpecimenFixture();
+
+    for (const [id, name] of [['p1', 'One'], ['p2', 'Two'], ['p3', 'Three']]) {
+      specimen = startInfection(
+        specimen,
+        makeProposal({ id, name }),
+        { mode: 'indefinite' },
+      );
+    }
+
+    const before = structuredClone(specimen);
+    expect(() => startInfection(
+      specimen,
+      makeProposal({ id: 'p4', name: 'Four' }),
+      { mode: 'indefinite' },
+    )).toThrow('ACTIVE_INFECTION_LIMIT');
+    expect(specimen).toEqual(before);
+    expect(specimen.infections.filter(item => item.status === 'active')).toHaveLength(3);
+  });
+
+  it('frees an active infection slot after removal', () => {
+    let specimen = makeSpecimenFixture();
+
+    for (const [id, name] of [['p1', 'One'], ['p2', 'Two'], ['p3', 'Three']]) {
+      specimen = startInfection(
+        specimen,
+        makeProposal({ id, name }),
+        { mode: 'indefinite' },
+      );
+    }
+
+    const removed = removeInfection(specimen, specimen.infections[0].id);
+    expect(() => startInfection(
+      removed,
+      makeProposal({ id: 'p4', name: 'Four' }),
+      { mode: 'indefinite' },
+    )).not.toThrow();
+  });
+
+  it('sorts active infections and traits by createdAt then id', () => {
+    const specimen = makeSpecimenFixture();
+    const withRecords = {
+      ...specimen,
+      infections: [
+        {
+          id: 'c',
+          name: 'C',
+          description: 'C',
+          prompt: 'C',
+          status: 'active' as const,
+          durationMode: 'indefinite' as const,
+          provenance: {
+            specimenId: specimen.id,
+            genomeId: specimen.currentGenome.id,
+            sourceType: 'user' as const,
+            sourceMessageIds: [],
+            sourceArtifactIds: [],
+          },
+          createdAt: 20,
+        },
+        {
+          id: 'b',
+          name: 'B',
+          description: 'B',
+          prompt: 'B',
+          status: 'active' as const,
+          durationMode: 'indefinite' as const,
+          provenance: {
+            specimenId: specimen.id,
+            genomeId: specimen.currentGenome.id,
+            sourceType: 'user' as const,
+            sourceMessageIds: [],
+            sourceArtifactIds: [],
+          },
+          createdAt: 10,
+        },
+        {
+          id: 'a',
+          name: 'A',
+          description: 'A',
+          prompt: 'A',
+          status: 'active' as const,
+          durationMode: 'indefinite' as const,
+          provenance: {
+            specimenId: specimen.id,
+            genomeId: specimen.currentGenome.id,
+            sourceType: 'user' as const,
+            sourceMessageIds: [],
+            sourceArtifactIds: [],
+          },
+          createdAt: 10,
+        },
+      ],
+      acquiredTraits: [
+        {
+          id: 't-b',
+          name: 'TB',
+          description: 'TB',
+          prompt: 'TB',
+          status: 'active' as const,
+          originType: 'explicit' as const,
+          provenance: {
+            specimenId: specimen.id,
+            genomeId: specimen.currentGenome.id,
+            sourceType: 'user' as const,
+            sourceMessageIds: [],
+            sourceArtifactIds: [],
+          },
+          createdAt: 20,
+        },
+        {
+          id: 't-a',
+          name: 'TA',
+          description: 'TA',
+          prompt: 'TA',
+          status: 'active' as const,
+          originType: 'explicit' as const,
+          provenance: {
+            specimenId: specimen.id,
+            genomeId: specimen.currentGenome.id,
+            sourceType: 'user' as const,
+            sourceMessageIds: [],
+            sourceArtifactIds: [],
+          },
+          createdAt: 10,
+        },
+      ],
+    };
+
+    expect(activeInfections(withRecords).map(item => item.id)).toEqual(['a', 'b', 'c']);
+    expect(activeTraits(withRecords).map(item => item.id)).toEqual(['t-a', 't-b']);
   });
 
   it('throws when asked to operate on a missing infection or trait', () => {
