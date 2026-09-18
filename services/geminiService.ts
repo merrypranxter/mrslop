@@ -91,7 +91,8 @@ const parseMutationProposal = (value: unknown): MutationProposal | undefined => 
     return undefined;
   }
 
-  if (value.recommendedTurns !== undefined && !isPositiveBoundedInteger(value.recommendedTurns)) {
+  const recommendedTurns = value.recommendedTurns;
+  if (recommendedTurns !== undefined && !isPositiveBoundedInteger(recommendedTurns)) {
     return undefined;
   }
 
@@ -102,7 +103,7 @@ const parseMutationProposal = (value: unknown): MutationProposal | undefined => 
     description: value.description,
     prompt: value.prompt,
     reason: value.reason,
-    ...(value.recommendedTurns !== undefined ? { recommendedTurns: value.recommendedTurns } : {}),
+    ...(typeof recommendedTurns === 'number' ? { recommendedTurns } : {}),
     sourceMessageIds: [...value.sourceMessageIds],
     sourceArtifactIds: [...value.sourceArtifactIds],
     sourceType: value.sourceType,
