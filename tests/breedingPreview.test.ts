@@ -295,7 +295,7 @@ describe('pure Round 2C breeding preview', () => {
 
   it('does not let child-local inherited trait IDs alter the genetic birth result', () => {
     const { a, b } = fixtures();
-    const seed = '00000000000000000000000000000abcde';
+    const seed = 'abcde'.padStart(32, '0');
 
     const firstIds = (() => {
       let i = 0;
