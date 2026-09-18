@@ -134,8 +134,11 @@ const parseMutationAction = (value: unknown): MutationActionRequest | undefined 
     case 'promote-infection':
     case 'retire-trait':
     case 'restore-checkpoint':
-      if (typeof targetId !== 'string' || !targetId.trim()) return undefined;
-      return { type: value.type, targetId };
+      if (targetId !== undefined && (typeof targetId !== 'string' || !targetId.trim())) return undefined;
+      return {
+        type: value.type,
+        ...(typeof targetId === 'string' ? { targetId } : {}),
+      };
 
     case 'acquire-trait':
       if (!proposal || proposal.kind !== 'trait') return undefined;

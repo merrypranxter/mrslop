@@ -81,6 +81,17 @@ describe('mutation response envelope', () => {
     });
   });
 
+  it('keeps targetless reversible actions so the app can resolve ambiguity from real specimen state', () => {
+    const result = parseMrSlopEnvelope(JSON.stringify({
+      text: 'Which one do you mean?',
+      mutationAction: {
+        type: 'remove-infection',
+      },
+    }));
+
+    expect(result.mutationAction).toEqual({ type: 'remove-infection' });
+  });
+
   it('parses a start-infection action only with a valid proposal and duration', () => {
     const result = parseMrSlopEnvelope(JSON.stringify({
       text: 'Try it for five.',
