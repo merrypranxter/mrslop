@@ -71,6 +71,26 @@ describe('mutation runtime prompt layers', () => {
       .toBeLessThan(result.indexOf('ACTIVE TEMPORARY INFECTIONS'));
   });
 
+  it('orders active runtime records by createdAt then id regardless of input order', () => {
+    const result = compileMutationRuntimeLayer(
+      [
+        trait({ id: 'trait-c', name: 'Trait C', createdAt: 20 }),
+        trait({ id: 'trait-b', name: 'Trait B', createdAt: 10 }),
+        trait({ id: 'trait-a', name: 'Trait A', createdAt: 10 }),
+      ],
+      [
+        infection({ id: 'infection-c', name: 'Infection C', createdAt: 20 }),
+        infection({ id: 'infection-b', name: 'Infection B', createdAt: 10 }),
+        infection({ id: 'infection-a', name: 'Infection A', createdAt: 10 }),
+      ],
+    );
+
+    expect(result.indexOf('TRAIT trait-a')).toBeLessThan(result.indexOf('TRAIT trait-b'));
+    expect(result.indexOf('TRAIT trait-b')).toBeLessThan(result.indexOf('TRAIT trait-c'));
+    expect(result.indexOf('INFECTION infection-a')).toBeLessThan(result.indexOf('INFECTION infection-b'));
+    expect(result.indexOf('INFECTION infection-b')).toBeLessThan(result.indexOf('INFECTION infection-c'));
+  });
+
   it('omits retired traits and inactive infections', () => {
     const result = compileMutationRuntimeLayer(
       [trait({ status: 'retired', retiredAt: 5 })],
