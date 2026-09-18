@@ -69,6 +69,12 @@ export type InfectionStatus = 'active' | 'expired' | 'removed' | 'promoted';
 export type InfectionDurationMode = 'turns' | 'indefinite';
 export type MutationSourceType = 'user' | 'mr-slop' | 'artifact' | 'conversation' | 'mutation-proposal';
 
+export interface InheritanceRef {
+  specimenId: string;
+  recordId: string;
+  inheritedAt: number;
+}
+
 export interface MutationProvenance {
   specimenId: string;
   genomeId: string;
@@ -87,6 +93,7 @@ export interface Infection {
   durationTurns?: number;
   remainingTurns?: number;
   provenance: MutationProvenance;
+  inheritedFrom?: InheritanceRef;
   createdAt: number;
   endedAt?: number;
   endReason?: string;
@@ -103,6 +110,7 @@ export interface AcquiredTrait {
   status: TraitStatus;
   originType: TraitOriginType;
   provenance: MutationProvenance;
+  inheritedFrom?: InheritanceRef;
   createdAt: number;
   retiredAt?: number;
 }
@@ -117,7 +125,11 @@ export type LifeHistoryEventType =
   | 'trait-acquired'
   | 'trait-retired'
   | 'accident-fossilized'
-  | 'checkpoint-restored';
+  | 'checkpoint-restored'
+  | 'specimen-forked'
+  | 'specimen-born-from-fork'
+  | 'scar-acquired'
+  | 'scar-inherited';
 
 export interface LifeHistoryEvent {
   id: string;
@@ -125,6 +137,8 @@ export interface LifeHistoryEvent {
   summary: string;
   mutationId?: string;
   checkpointId?: string;
+  scarId?: string;
+  relatedSpecimenId?: string;
   messageIds: string[];
   artifactIds: string[];
   createdAt: number;
@@ -167,8 +181,54 @@ export interface Checkpoint {
   createdAt: number;
 }
 
+export type ScarOrigin = 'experienced' | 'inherited';
+export type ScarKind =
+  | 'infection-survived'
+  | 'infection-promoted'
+  | 'fossilized-accident'
+  | 'checkpoint-reversion'
+  | 'genome-change'
+  | 'fork-birth';
+
+export interface Scar {
+  id: string;
+  name: string;
+  description: string;
+  kind: ScarKind;
+  origin: ScarOrigin;
+  createdAt: number;
+  sourceSpecimenId?: string;
+  sourceScarId?: string;
+  inheritedAt?: number;
+  relatedEventIds: string[];
+  relatedMutationIds: string[];
+  relatedCheckpointIds: string[];
+  messageIds: string[];
+  artifactIds: string[];
+}
+
+export interface LineageRecord {
+  rootSpecimenId: string;
+  parentSpecimenId: string | null;
+  generation: number;
+  forkedAt?: number;
+  forkSourceEventId?: string;
+  forkSourceCheckpointId?: string;
+  forkSourceGenomeId?: string;
+  source: 'native-v3' | 'fork-v3' | 'migrated-v2';
+}
+
+export interface DriftBaseline {
+  capturedAt: number;
+  source: 'native-v3' | 'fork-v3' | 'migrated-v2';
+  genome: Genome;
+  activeTraitIds: string[];
+  activeInfectionIds: string[];
+  inheritedScarIds: string[];
+}
+
 export interface Specimen {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
   name: string;
   phase: SpecimenPhase;
@@ -180,11 +240,12 @@ export interface Specimen {
   acquiredTraits: AcquiredTrait[];
   infections: Infection[];
   lifeHistory: LifeHistoryEvent[];
-  scars: unknown[];
+  scars: Scar[];
+  birthBaseline: DriftBaseline;
+  lineage: LineageRecord;
   trajectory: unknown | null;
   controllerState: unknown | null;
   metrics: unknown | null;
-  lineage: unknown | null;
   createdAt: number;
   lastModified: number;
 }
