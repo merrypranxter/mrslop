@@ -115,7 +115,7 @@ const buildCandidates = (
           scarsSupportingTrait(source.parent, source.trait).map(scar => scar.id)),
       )].sort();
       const scarBonus = supportingScarIds.length > 0 ? 0.15 : 0;
-      const finalProbability = Math.min(1, baseProbability + scarBonus);
+      const finalProbability = Math.min(1, Number((baseProbability + scarBonus).toFixed(2)));
       const roll = deterministicUniform(
         seed,
         'trait-inheritance',
