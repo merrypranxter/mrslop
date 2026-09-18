@@ -430,6 +430,101 @@ export interface MrSlopResponseEnvelope {
   forkAction?: ForkActionRequest;
 }
 
+
+export type PetriTrialStatus =
+  | 'draft'
+  | 'running'
+  | 'partial'
+  | 'complete'
+  | 'abandoned';
+
+export type PetriEntrantResultStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'aborted';
+
+export type PetriSelectionIdentityMode = 'blind' | 'revealed';
+
+export type PetriDriftBand = 'LOW' | 'MODERATE' | 'HIGH' | 'EXTREME';
+
+export interface PetriGenerationConfig {
+  model: string;
+  temperature: number;
+  maxOutputTokens: number;
+  experimentInstructionVersion: string;
+}
+
+export interface PetriEntrantSnapshot {
+  id: string;
+  specimenId: string;
+  specimenName: string;
+  specimenSchemaVersion: 4;
+  stateHash: string;
+  generation: number;
+  lineageKind: LineageKind;
+  driftScore: number;
+  driftBand: PetriDriftBand;
+  genome: Genome;
+  activeTraits: AcquiredTrait[];
+  activeInfections: Infection[];
+  capturedAt: number;
+}
+
+export interface PetriEntrantAttempt {
+  attempt: number;
+  status: PetriEntrantResultStatus;
+  startedAt: number;
+  endedAt?: number;
+  outputText?: string;
+  finishReason?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  systemInstructionHash: string;
+  challengeHash: string;
+  entrantStateHash: string;
+}
+
+export interface PetriEntrantResult {
+  entrantSnapshotId: string;
+  specimenId: string;
+  status: PetriEntrantResultStatus;
+  attempts: PetriEntrantAttempt[];
+  outputText?: string;
+  finishReason?: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface PetriSelection {
+  selectedEntrantSnapshotIds: string[];
+  note?: string;
+  identityMode: PetriSelectionIdentityMode;
+  selectedAt: number;
+  revisedAt?: number;
+}
+
+export interface PetriTrial {
+  schemaVersion: 1;
+  id: string;
+  challenge: string;
+  challengeHash: string;
+  status: PetriTrialStatus;
+  model: string;
+  temperature: number;
+  maxOutputTokens: number;
+  experimentInstructionVersion: string;
+  entrantOrder: string[];
+  entrants: PetriEntrantSnapshot[];
+  results: PetriEntrantResult[];
+  selection: PetriSelection | null;
+  createdAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  lastModified: number;
+}
+
 export enum VisualType {
   STARS = 'stars',
   MATRIX = 'matrix',
