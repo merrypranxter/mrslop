@@ -15,18 +15,29 @@ import { SLOP_LIBRARY } from '../data/slopLibrary';
 import { buildCatalogIndex } from '../lib/catalog';
 import { createGenome } from '../lib/genome';
 import { assembleSystemInstruction } from '../lib/kernel';
+import {
+  acquireTrait,
+  advanceSuccessfulTurn,
+  fossilizeAccident,
+  promoteInfection,
+  removeInfection,
+  retireTrait,
+  startInfection,
+} from '../lib/mutations';
 import { compileFuseGenome, MR_SLOP_FUSE_VERSION } from '../services/kernelCompiler';
 import { sendMrSlopMessage } from '../services/geminiService';
 import { processFile } from '../services/fileService';
 import { isSpeechSupported, startListening, stopListening } from '../services/speechService';
 import { exportConversationToPDF, exportConversationToTXT } from '../services/exportService';
-import { checkpointSpecimen, saveArtifact } from '../services/specimenStore';
+import { checkpointSpecimen, restoreCheckpoint, saveArtifact } from '../services/specimenStore';
 import {
   Attachment,
   ChoiceCardEvent,
   ChoiceCardOption,
   Genome,
   Message,
+  MutationActionRequest,
+  MutationProposal,
   Role,
   Specimen,
   StructuralDecisionEvent,
@@ -34,6 +45,8 @@ import {
 import ParsedMessage from './ParsedMessage';
 import ChoiceCard from './ChoiceCard';
 import StructuralDecisionModal from './StructuralDecisionModal';
+import MutationCard from './MutationCard';
+import MutationStatus from './MutationStatus';
 import './ConversationUI.css';
 
 interface MrSlopTerminalProps {
@@ -67,14 +80,26 @@ const snapshotGenome = (genome: Genome): Genome => ({
   })),
 });
 
-const specimenStateSummary = (specimen: Specimen): string => [
-  `Specimen: ${specimen.name}`,
-  `Phase: ${specimen.phase}`,
-  `Mode: ${specimen.currentGenome.mode}`,
-  `Installed IDs: ${specimen.currentGenome.components.map(component => component.id).join(', ') || 'none yet'}`,
-  `Acquired traits: ${specimen.acquiredTraits.map(trait => trait.name).join(', ') || 'none'}`,
-  `Checkpoints: ${specimen.checkpoints.length}`,
-].join('\n');
+const specimenStateSummary = (specimen: Specimen): string => {
+  const traits = specimen.acquiredTraits
+    .filter(trait => trait.status === 'active')
+    .map(trait => trait.name);
+  const infections = specimen.infections
+    .filter(infection => infection.status === 'active')
+    .map(infection => infection.durationMode === 'indefinite'
+      ? `${infection.name} (indefinite)`
+      : `${infection.name} (${infection.remainingTurns ?? 0} turns left)`);
+
+  return [
+    `Specimen: ${specimen.name}`,
+    `Phase: ${specimen.phase}`,
+    `Mode: ${specimen.currentGenome.mode}`,
+    `Installed IDs: ${specimen.currentGenome.components.map(component => component.id).join(', ') || 'none yet'}`,
+    `Active acquired traits: ${traits.join(', ') || 'none'}`,
+    `Active infections: ${infections.join(', ') || 'none'}`,
+    `Checkpoints: ${specimen.checkpoints.length}`,
+  ].join('\n');
+};
 
 const userFacingTransportError = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error || '');
@@ -98,6 +123,10 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [activeChoice, setActiveChoice] = useState<ChoiceCardEvent | null>(null);
   const [activeDecision, setActiveDecision] = useState<StructuralDecisionEvent | null>(null);
+  const [activeMutationProposal, setActiveMutationProposal] = useState<MutationProposal | null>(null);
+  const [preferredMutationTurns, setPreferredMutationTurns] = useState<number | undefined>(undefined);
+  const [pendingMutationAction, setPendingMutationAction] = useState<MutationActionRequest | null>(null);
+  const [mutationChoiceActions, setMutationChoiceActions] = useState<Record<string, MutationActionRequest>>({});
   const [structuralError, setStructuralError] = useState<string | null>(null);
   const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
   const [transmissionError, setTransmissionError] = useState<string | null>(null);
@@ -110,6 +139,10 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     setWorking(specimen);
     setActiveChoice(null);
     setActiveDecision(null);
+    setActiveMutationProposal(null);
+    setPreferredMutationTurns(undefined);
+    setPendingMutationAction(null);
+    setMutationChoiceActions({});
     setFailedTurn(null);
     setTransmissionError(null);
   }, [specimen.id]);
@@ -120,7 +153,7 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [working.messages, activeChoice, isProcessing, transmissionError]);
+  }, [working.messages, activeChoice, activeMutationProposal, isProcessing, transmissionError]);
 
   const commit = (next: Specimen) => {
     setWorking(next);
@@ -145,15 +178,212 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     commit(next);
   };
 
+  const makeMutationDecision = (
+    action: MutationActionRequest,
+    base: Specimen,
+  ): StructuralDecisionEvent | null => {
+    let title = 'MUTATION DECISION';
+    let reason = 'This changes the specimen persistently, so Mr. Slop needs your explicit approval.';
+    let label = 'APPLY MUTATION';
+    let description = 'Apply this lasting mutation.';
+
+    if (action.type === 'fossilize-accident' && action.proposal) {
+      title = `FOSSILIZE ${action.proposal.name}?`;
+      reason = `Preserve the observed behavior “${action.proposal.name}” as a lasting acquired trait.`;
+      label = 'FOSSILIZE IT';
+      description = action.proposal.description;
+    } else if (action.type === 'acquire-trait' && action.proposal) {
+      title = `KEEP ${action.proposal.name}?`;
+      reason = `Add “${action.proposal.name}” as a lasting acquired trait.`;
+      label = 'KEEP THIS TRAIT';
+      description = action.proposal.description;
+    } else if (action.type === 'promote-infection' && action.targetId) {
+      const infection = base.infections.find(item => item.id === action.targetId);
+      if (!infection || infection.status !== 'active') return null;
+      title = `KEEP ${infection.name}?`;
+      reason = `Promote the temporary infection “${infection.name}” into a lasting acquired trait.`;
+      label = 'KEEP AS TRAIT';
+      description = infection.description;
+    } else if (action.type === 'retire-trait' && action.targetId) {
+      const trait = base.acquiredTraits.find(item => item.id === action.targetId);
+      if (!trait || trait.status !== 'active') return null;
+      title = `RETIRE ${trait.name}?`;
+      reason = `Stop applying the acquired trait “${trait.name}”. Its history stays recorded.`;
+      label = 'RETIRE TRAIT';
+      description = trait.description;
+    } else if (action.type === 'restore-checkpoint' && action.targetId) {
+      const checkpoint = base.checkpoints.find(item => item.id === action.targetId);
+      if (!checkpoint) return null;
+      title = 'RESTORE CHECKPOINT?';
+      reason = `Restore the specimen’s genome and mutation state to “${checkpoint.reason}”. Conversation and artifacts stay intact.`;
+      label = 'RESTORE CHECKPOINT';
+      description = checkpoint.reason;
+    } else {
+      return null;
+    }
+
+    return {
+      type: 'structural-decision',
+      id: `mutation-decision-${crypto.randomUUID()}`,
+      title,
+      reason,
+      options: [{
+        id: `approve-${action.type}`,
+        label,
+        description,
+      }],
+    };
+  };
+
+  const openMutationDecision = (action: MutationActionRequest, base: Specimen = working) => {
+    const event = makeMutationDecision(action, base);
+    if (!event) {
+      setTransmissionError('That mutation target is no longer available.');
+      return;
+    }
+    setPendingMutationAction(action);
+    setActiveMutationProposal(null);
+    setActiveChoice(null);
+    setStructuralError(null);
+    setActiveDecision(event);
+  };
+
+  const mutationChoiceFor = (
+    action: MutationActionRequest,
+    base: Specimen,
+  ): { event: ChoiceCardEvent; actions: Record<string, MutationActionRequest> } | null => {
+    const actions: Record<string, MutationActionRequest> = {};
+    const options: ChoiceCardOption[] = [];
+
+    if (action.type === 'remove-infection' || action.type === 'promote-infection') {
+      base.infections
+        .filter(infection => infection.status === 'active')
+        .forEach(infection => {
+          const id = `mutation-choice-${action.type}-${infection.id}`;
+          actions[id] = { ...action, targetId: infection.id };
+          options.push({
+            id,
+            label: action.type === 'remove-infection'
+              ? `REMOVE ${infection.name}`
+              : `KEEP ${infection.name} AS TRAIT`,
+            description: infection.description,
+          });
+        });
+    } else if (action.type === 'retire-trait') {
+      base.acquiredTraits
+        .filter(trait => trait.status === 'active')
+        .forEach(trait => {
+          const id = `mutation-choice-retire-${trait.id}`;
+          actions[id] = { ...action, targetId: trait.id };
+          options.push({
+            id,
+            label: `RETIRE ${trait.name}`,
+            description: trait.description,
+          });
+        });
+    } else if (action.type === 'restore-checkpoint') {
+      base.checkpoints.forEach(checkpoint => {
+        const id = `mutation-choice-restore-${checkpoint.id}`;
+        actions[id] = { ...action, targetId: checkpoint.id };
+        options.push({
+          id,
+          label: `RESTORE ${checkpoint.reason}`,
+          description: 'Restore this saved genome and mutation state.',
+        });
+      });
+    }
+
+    if (options.length < 2) return null;
+
+    return {
+      event: {
+        type: 'choice-card',
+        id: `mutation-choice-${crypto.randomUUID()}`,
+        title: 'WHICH ONE?',
+        reason: 'More than one real specimen state matches that request. Pick the one you meant.',
+        options,
+      },
+      actions,
+    };
+  };
+
+  const routeMutationAction = (
+    action: MutationActionRequest,
+    base: Specimen,
+  ) => {
+    if (action.type === 'start-infection') {
+      if (!action.proposal || action.proposal.kind !== 'infection') return;
+      setPreferredMutationTurns(action.durationMode === 'turns' ? action.durationTurns : undefined);
+      setActiveMutationProposal(action.proposal);
+      return;
+    }
+
+    if (action.type === 'remove-infection') {
+      const active = base.infections.filter(infection => infection.status === 'active');
+      const target = action.targetId
+        ? active.find(infection => infection.id === action.targetId)
+        : active.length === 1 ? active[0] : undefined;
+
+      if (target) {
+        commit(removeInfection(base, target.id, 'removed from conversation'));
+        return;
+      }
+
+      const choice = mutationChoiceFor(action, base);
+      if (choice) {
+        setMutationChoiceActions(choice.actions);
+        setActiveChoice(choice.event);
+      } else {
+        setTransmissionError('There is no unique active infection to remove.');
+      }
+      return;
+    }
+
+    if (
+      action.type === 'promote-infection' ||
+      action.type === 'retire-trait' ||
+      action.type === 'restore-checkpoint'
+    ) {
+      const candidateIds = action.type === 'promote-infection'
+        ? base.infections.filter(item => item.status === 'active').map(item => item.id)
+        : action.type === 'retire-trait'
+          ? base.acquiredTraits.filter(item => item.status === 'active').map(item => item.id)
+          : base.checkpoints.map(item => item.id);
+      const targetId = action.targetId || (candidateIds.length === 1 ? candidateIds[0] : undefined);
+
+      if (targetId) {
+        openMutationDecision({ ...action, targetId }, base);
+        return;
+      }
+
+      const choice = mutationChoiceFor(action, base);
+      if (choice) {
+        setMutationChoiceActions(choice.actions);
+        setActiveChoice(choice.event);
+      } else {
+        setTransmissionError('There is no unique mutation target for that request.');
+      }
+      return;
+    }
+
+    if (action.type === 'acquire-trait' || action.type === 'fossilize-accident') {
+      if (action.proposal) openMutationDecision(action, base);
+    }
+  };
+
   const processEnvelope = async (
     base: Specimen,
     envelope: Awaited<ReturnType<typeof sendMrSlopMessage>>,
   ) => {
     const modelMessage = makeMessage(Role.MODEL, envelope.text);
-    const next = updateMessages(base, [...base.messages, modelMessage]);
+    const accepted = updateMessages(base, [...base.messages, modelMessage]);
+    commit(accepted);
+    const next = advanceSuccessfulTurn(accepted);
     commit(next);
     setFailedTurn(null);
     setTransmissionError(null);
+
+    setMutationChoiceActions({});
 
     if (envelope.uiEvent?.type === 'structural-decision') {
       setActiveChoice(null);
@@ -162,6 +392,13 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     } else if (envelope.uiEvent?.type === 'choice-card') {
       setActiveDecision(null);
       setActiveChoice(envelope.uiEvent);
+    }
+
+    if (envelope.mutationAction) {
+      routeMutationAction(envelope.mutationAction, next);
+    } else if (envelope.mutationProposal) {
+      setPreferredMutationTurns(envelope.mutationProposal.recommendedTurns);
+      setActiveMutationProposal(envelope.mutationProposal);
     }
 
     if (envelope.proposedGenome && next.phase === 'building') {
@@ -193,6 +430,8 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
         phase: base.phase,
         catalogIndex: base.phase === 'building' ? CATALOG_INDEX : '',
         genome: base.currentGenome,
+        acquiredTraits: base.acquiredTraits,
+        infections: base.infections,
         specimenState: specimenStateSummary(base),
       });
       const envelope = await sendMrSlopMessage({
@@ -228,6 +467,9 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     }
 
     setActiveChoice(null);
+    setActiveMutationProposal(null);
+    setPreferredMutationTurns(undefined);
+    setMutationChoiceActions({});
     setTransmissionError(null);
     const rawAttachments = attachments;
     const persistedAttachments = rawAttachments.map(attachment => ({
@@ -293,6 +535,14 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
   };
 
   const choose = async (option: ChoiceCardOption) => {
+    const mutationAction = mutationChoiceActions[option.id];
+    if (mutationAction) {
+      setActiveChoice(null);
+      setMutationChoiceActions({});
+      routeMutationAction(mutationAction, working);
+      return;
+    }
+
     if (working.phase === 'building' && option.componentIds?.length) {
       await spawnBuildingSpecimen(option);
       return;
@@ -349,6 +599,63 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
       setStructuralError('FUSE failed. The previous genome is still active. Retry the option or use STACK instead.');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const applyApprovedMutation = () => {
+    if (!pendingMutationAction) return;
+
+    const checkpointed = checkpointSpecimen(
+      working,
+      `Before ${activeDecision?.title || pendingMutationAction.type}`,
+    );
+    commit(checkpointed);
+
+    try {
+      let updated = checkpointed;
+
+      if (pendingMutationAction.type === 'fossilize-accident' && pendingMutationAction.proposal) {
+        updated = fossilizeAccident(checkpointed, pendingMutationAction.proposal);
+      } else if (pendingMutationAction.type === 'acquire-trait' && pendingMutationAction.proposal) {
+        const origin = pendingMutationAction.proposal.sourceType === 'mr-slop' ||
+          pendingMutationAction.proposal.sourceType === 'mutation-proposal'
+          ? 'mr-slop-proposal'
+          : 'explicit';
+        updated = acquireTrait(checkpointed, pendingMutationAction.proposal, origin);
+      } else if (pendingMutationAction.type === 'promote-infection' && pendingMutationAction.targetId) {
+        updated = promoteInfection(checkpointed, pendingMutationAction.targetId);
+      } else if (pendingMutationAction.type === 'retire-trait' && pendingMutationAction.targetId) {
+        updated = retireTrait(checkpointed, pendingMutationAction.targetId);
+      } else if (pendingMutationAction.type === 'restore-checkpoint' && pendingMutationAction.targetId) {
+        updated = restoreCheckpoint(checkpointed, pendingMutationAction.targetId);
+      } else {
+        throw new Error('UNSUPPORTED_MUTATION_ACTION');
+      }
+
+      commit(updated);
+      setActiveDecision(null);
+      setPendingMutationAction(null);
+      setStructuralError(null);
+    } catch {
+      setStructuralError('That mutation could not be applied. The pre-change checkpoint is still available.');
+    }
+  };
+
+  const startProposedInfection = (
+    proposal: MutationProposal,
+    duration: { mode: 'turns'; turns: number } | { mode: 'indefinite' },
+  ) => {
+    const next = startInfection(working, proposal, duration);
+    commit(next);
+    setActiveMutationProposal(null);
+    setPreferredMutationTurns(undefined);
+  };
+
+  const reviewPersistentProposal = (proposal: MutationProposal) => {
+    if (proposal.kind === 'fossilized-accident') {
+      openMutationDecision({ type: 'fossilize-accident', proposal }, working);
+    } else if (proposal.kind === 'trait') {
+      openMutationDecision({ type: 'acquire-trait', proposal }, working);
     }
   };
 
@@ -414,6 +721,26 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
         </div>
       </header>
 
+      <MutationStatus
+        infections={working.infections}
+        traits={working.acquiredTraits}
+        onRemoveInfection={infectionId => {
+          try {
+            commit(removeInfection(working, infectionId, 'removed by user'));
+          } catch {
+            setTransmissionError('That infection is no longer active.');
+          }
+        }}
+        onPromoteInfection={infectionId => openMutationDecision(
+          { type: 'promote-infection', targetId: infectionId },
+          working,
+        )}
+        onRetireTrait={traitId => openMutationDecision(
+          { type: 'retire-trait', targetId: traitId },
+          working,
+        )}
+      />
+
       <div className="slop-chat-log" ref={scrollRef}>
         {working.messages.length === 0 && (
           <div className="slop-empty-chat">
@@ -464,6 +791,20 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
 
         {activeChoice && !activeDecision && (
           <ChoiceCard event={activeChoice} onSelect={choose} />
+        )}
+
+        {activeMutationProposal && !activeDecision && (
+          <MutationCard
+            proposal={activeMutationProposal}
+            preferredTurns={preferredMutationTurns}
+            onTryTurns={turns => startProposedInfection(activeMutationProposal, { mode: 'turns', turns })}
+            onIndefinite={() => startProposedInfection(activeMutationProposal, { mode: 'indefinite' })}
+            onReviewPersistent={() => reviewPersistentProposal(activeMutationProposal)}
+            onDismiss={() => {
+              setActiveMutationProposal(null);
+              setPreferredMutationTurns(undefined);
+            }}
+          />
         )}
 
         {transmissionError && (
@@ -526,20 +867,25 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           event={activeDecision}
           busy={isProcessing}
           error={structuralError}
-          onApprove={option => void applyStructural(option)}
+          onApprove={option => {
+            if (pendingMutationAction) applyApprovedMutation();
+            else void applyStructural(option);
+          }}
           onCancel={() => {
             setActiveDecision(null);
+            setPendingMutationAction(null);
             setStructuralError(null);
           }}
           onAnswerInChat={() => {
             setActiveDecision(null);
+            setPendingMutationAction(null);
             setStructuralError(null);
             requestAnimationFrame(() => inputRef.current?.focus());
           }}
         />
       )}
 
-      {activeDecision && structuralError && currentDecisionOption?.mode === 'fuse' && (
+      {activeDecision && !pendingMutationAction && structuralError && currentDecisionOption?.mode === 'fuse' && (
         <button
           type="button"
           className="stack-fallback-floating"
