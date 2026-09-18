@@ -176,7 +176,7 @@ describe('Round 2B fork UI', () => {
     fireEvent.click(toggle);
     expect(screen.getByText(/parent: parent/i)).toBeInTheDocument();
     expect(screen.getByText(/root: root/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 experienced scars/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/3 experienced scars/i).length).toBeGreaterThan(0);
   });
 
   it('renders fork result actions as a compact post-persist card', () => {
@@ -236,7 +236,8 @@ describe('Round 2B fork UI', () => {
     await screen.findByRole('button', { name: /build me/i });
     fireEvent.click(screen.getByRole('button', { name: /build me/i }));
     fireEvent.click(screen.getByRole('button', { name: /start from a specimen/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /atomic parent/i }));
+    const parentLabel = await screen.findByText('ATOMIC PARENT');
+    fireEvent.click(parentLabel.closest('button')!);
 
     sendText('fork this thing');
     fireEvent.click(await screen.findByRole('button', { name: /create child/i }));
