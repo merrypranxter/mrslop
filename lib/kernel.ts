@@ -1,11 +1,14 @@
-import { Genome, SpecimenPhase } from '../types';
+import { AcquiredTrait, Genome, Infection, SpecimenPhase } from '../types';
 import { BUILD_MODE_INSTRUCTION, MR_SLOP_BASE_SHELL } from '../prompts/mrSlopBase';
 import { KERNEL_PROTOCOL } from '../prompts/kernelProtocol';
+import { compileMutationRuntimeLayer } from './mutations';
 
 export interface AssembleSystemInstructionArgs {
   phase: SpecimenPhase;
   catalogIndex: string;
   genome: Genome;
+  acquiredTraits?: AcquiredTrait[];
+  infections?: Infection[];
   specimenState?: string;
 }
 
@@ -43,6 +46,8 @@ export const assembleSystemInstruction = ({
   phase,
   catalogIndex,
   genome,
+  acquiredTraits = [],
+  infections = [],
   specimenState,
 }: AssembleSystemInstructionArgs): string => {
   const layers = [MR_SLOP_BASE_SHELL, KERNEL_PROTOCOL];
@@ -57,6 +62,11 @@ export const assembleSystemInstruction = ({
 
   const kernel = specimenKernel(genome);
   layers.push(`ACTIVE SPECIMEN KERNEL\n${kernel || '[NO COMPONENTS INSTALLED]'}`);
+
+  const mutationRuntime = compileMutationRuntimeLayer(acquiredTraits, infections);
+  if (mutationRuntime.trim()) {
+    layers.push(mutationRuntime);
+  }
 
   if (specimenState?.trim()) {
     layers.push(`CURRENT SPECIMEN STATE\n${specimenState.trim()}`);
