@@ -207,6 +207,19 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     setTransmissionError(null);
   }, [specimen.id]);
 
+  useEffect(() => {
+    setWorking(current => {
+      if (current.id !== specimen.id) return specimen;
+
+      const knownHistoryIds = new Set(current.lifeHistory.map(event => event.id));
+      const hasNewApplicationHistory = specimen.lifeHistory.some(
+        event => !knownHistoryIds.has(event.id),
+      );
+
+      return hasNewApplicationHistory ? specimen : current;
+    });
+  }, [specimen]);
+
   useEffect(() => () => stopListening(), []);
 
   useEffect(() => {
