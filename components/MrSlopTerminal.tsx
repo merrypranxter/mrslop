@@ -89,17 +89,50 @@ const specimenStateSummary = (specimen: Specimen): string => {
     .map(infection => infection.durationMode === 'indefinite'
       ? `${infection.name} (indefinite)`
       : `${infection.name} (${infection.remainingTurns ?? 0} turns left)`);
+  const recentMessageRefs = specimen.messages
+    .slice(-8)
+    .map(message => {
+      const excerpt = message.content.replace(/\\s+/g, ' ').trim().slice(0, 90);
+      return `${message.id} [${message.role}] ${excerpt}`;
+    });
+  const recentArtifactRefs = specimen.artifacts
+    .slice(-8)
+    .map(artifact => `${artifact.id} [${artifact.kind}] ${artifact.title}`);
 
   return [
     `Specimen: ${specimen.name}`,
     `Phase: ${specimen.phase}`,
     `Mode: ${specimen.currentGenome.mode}`,
+    `Genome ID: ${specimen.currentGenome.id}`,
     `Installed IDs: ${specimen.currentGenome.components.map(component => component.id).join(', ') || 'none yet'}`,
     `Active acquired traits: ${traits.join(', ') || 'none'}`,
     `Active infections: ${infections.join(', ') || 'none'}`,
     `Checkpoints: ${specimen.checkpoints.length}`,
+    `Recent message refs: ${recentMessageRefs.join(' | ') || 'none'}`,
+    `Recent artifact refs: ${recentArtifactRefs.join(' | ') || 'none'}`,
   ].join('\n');
 };
+
+const sanitizeMutationProposal = (
+  proposal: MutationProposal,
+  specimen: Specimen,
+): MutationProposal => {
+  const messageIds = new Set(specimen.messages.map(message => message.id));
+  const artifactIds = new Set(specimen.artifacts.map(artifact => artifact.id));
+
+  return {
+    ...proposal,
+    sourceMessageIds: proposal.sourceMessageIds.filter(id => messageIds.has(id)),
+    sourceArtifactIds: proposal.sourceArtifactIds.filter(id => artifactIds.has(id)),
+  };
+};
+
+const sanitizeMutationAction = (
+  action: MutationActionRequest,
+  specimen: Specimen,
+): MutationActionRequest => action.proposal
+  ? { ...action, proposal: sanitizeMutationProposal(action.proposal, specimen) }
+  : action;
 
 const userFacingTransportError = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error || '');
@@ -395,10 +428,11 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     }
 
     if (envelope.mutationAction) {
-      routeMutationAction(envelope.mutationAction, next);
+      routeMutationAction(sanitizeMutationAction(envelope.mutationAction, next), next);
     } else if (envelope.mutationProposal) {
-      setPreferredMutationTurns(envelope.mutationProposal.recommendedTurns);
-      setActiveMutationProposal(envelope.mutationProposal);
+      const proposal = sanitizeMutationProposal(envelope.mutationProposal, next);
+      setPreferredMutationTurns(proposal.recommendedTurns);
+      setActiveMutationProposal(proposal);
     }
 
     if (envelope.proposedGenome && next.phase === 'building') {
