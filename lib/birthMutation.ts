@@ -154,7 +154,6 @@ const traitMutationTargets = (
 
   return targets.sort((left, right) =>
     left.fingerprint.localeCompare(right.fingerprint) ||
-    left.trait.id.localeCompare(right.trait.id) ||
     left.mutator.id.localeCompare(right.mutator.id) ||
     left.mutator.version.localeCompare(right.mutator.version));
 };
@@ -168,8 +167,8 @@ const selectTraitMutationTarget = (
   if (targets.length === 0) return null;
 
   return [...targets].sort((left, right) => {
-    const leftKey = `${pairKey}:${left.fingerprint}:${left.trait.id}:${left.mutator.id}:${left.mutator.version}`;
-    const rightKey = `${pairKey}:${right.fingerprint}:${right.trait.id}:${right.mutator.id}:${right.mutator.version}`;
+    const leftKey = `${pairKey}:${left.fingerprint}:${left.mutator.id}:${left.mutator.version}`;
+    const rightKey = `${pairKey}:${right.fingerprint}:${right.mutator.id}:${right.mutator.version}`;
     return deterministicUniform(seed, 'birth-trait-candidate', leftKey) -
       deterministicUniform(seed, 'birth-trait-candidate', rightKey) ||
       leftKey.localeCompare(rightKey);
@@ -258,7 +257,7 @@ export const applyBirthMutation = (
 
     const mutated = target.mutator.apply(target.trait);
     const nextTraits = traits.map(trait =>
-      trait.id === target.trait.id ? mutated : trait);
+      trait === target.trait ? mutated : trait);
 
     return {
       components,
