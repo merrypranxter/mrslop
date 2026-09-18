@@ -47,7 +47,7 @@ const LineageStatus: React.FC<LineageStatusProps> = ({
           <strong>
             {parentNames.length === 0
               ? 'PARENT: ROOT'
-              : \`\${parentNames.length === 1 ? 'PARENT' : 'PARENTS'}: \${parentNames.join(' × ')}\`}
+              : (parentNames.length === 1 ? 'PARENT: ' : 'PARENTS: ') + parentNames.join(' × ')}
           </strong>
           <span>{rootNames.length === 1 ? 'ROOT' : 'ROOTS'}: {rootNames.join(' · ')}</span>
           <span>GENERATION: {specimen.lineage.generation}</span>
