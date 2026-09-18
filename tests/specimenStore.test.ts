@@ -60,7 +60,7 @@ describe('specimenStore', () => {
 
   it('creates mutation-capable specimens with independent birth/current genome snapshots', () => {
     const specimen = makeSpecimen(genome, 'Metric Gremlin');
-    expect(specimen.schemaVersion).toBe(2);
+    expect(specimen.schemaVersion).toBe(3);
     expect(specimen.phase).toBe('spawned');
     expect(specimen.birthGenome).not.toBe(specimen.currentGenome);
     expect(specimen.birthGenome.components[0]).not.toBe(specimen.currentGenome.components[0]);
