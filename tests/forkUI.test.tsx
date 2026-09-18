@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -246,12 +246,14 @@ describe('Round 2B fork UI', () => {
     expect(screen.queryByRole('button', { name: /open child/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /saved specimens/i }));
-    expect(screen.queryByRole('button', { name: /atomic child/i })).not.toBeInTheDocument();
+    const sidebar = screen.getByRole('complementary', { name: /saved specimens/i });
+    expect(within(sidebar).queryByText('ATOMIC CHILD')).not.toBeInTheDocument();
 
     resolveSave();
 
     expect(await screen.findByRole('button', { name: /open child/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /saved specimens/i }));
-    expect(await screen.findByRole('button', { name: /atomic child/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(sidebar).getByText('ATOMIC CHILD')).toBeInTheDocument();
+    });
   });
 });
