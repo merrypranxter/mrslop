@@ -183,8 +183,8 @@ describe('Round 2B acceptance', () => {
     if (!child) return;
 
     expect(parentAfterFork.id).toBe(parent.id);
-    expect(child.lineage.parentSpecimenId).toBe(parentAfterFork.id);
-    expect(child.birthBaseline.source).toBe('fork-v3');
+    expect(child.lineage.parentSpecimenIds).toEqual([parentAfterFork.id]);
+    expect(child.birthBaseline.source).toBe('fork-v4');
     expect(calculateDrift(child).score).toBe(0);
     expect(child.messages).toHaveLength(1);
     expect(child.artifacts).toEqual([]);
@@ -194,7 +194,7 @@ describe('Round 2B acceptance', () => {
     expect(parentActiveTrait).toBeDefined();
     expect(child.acquiredTraits).toHaveLength(1);
     expect(child.acquiredTraits[0].id).not.toBe(parentActiveTrait?.id);
-    expect(child.acquiredTraits[0].inheritedFrom).toMatchObject({
+    expect(child.acquiredTraits[0].inheritanceSources?.[0]).toMatchObject({
       specimenId: parentAfterFork.id,
       recordId: parentActiveTrait?.id,
     });
@@ -217,7 +217,7 @@ describe('Round 2B acceptance', () => {
 
     expect(reloaded).toHaveLength(2);
     expect(reloadedParent?.lifeHistory.some(event => event.type === 'specimen-forked')).toBe(true);
-    expect(reloadedChild?.lineage.parentSpecimenId).toBe(parentAfterFork.id);
+    expect(reloadedChild?.lineage.parentSpecimenIds).toEqual([parentAfterFork.id]);
     expect(reloadedChild?.birthBaseline).toEqual(divergedChild.birthBaseline);
     expect(reloadedChild?.scars).toEqual(divergedChild.scars);
     expect(reloadedChild && calculateDrift(reloadedChild)).toEqual(calculateDrift(divergedChild));
