@@ -8,6 +8,7 @@ import {
 } from '../lib/breedingState';
 import { createGenome } from '../lib/genome';
 import { makeSpecimen } from '../services/specimenStore';
+import { Role } from '../types';
 import type { AcquiredTrait, Infection, Scar, Specimen } from '../types';
 
 const baseSpecimen = (): Specimen => {
@@ -131,7 +132,7 @@ describe('breeding-relevant state', () => {
       ...specimen,
       messages: [{
         id: 'message-new',
-        role: 'user' as const,
+        role: Role.USER,
         content: 'This should not change genetics.',
         timestamp: 100,
       }],
@@ -169,7 +170,7 @@ describe('breeding-relevant state', () => {
 
     expect(breedingStateHash(changed)).toBe(baseline);
 
-    const snapshot = breedingStateSnapshot(changed) as Record<string, unknown>;
+    const snapshot = breedingStateSnapshot(changed);
     expect(snapshot).not.toHaveProperty('messages');
     expect(snapshot).not.toHaveProperty('artifacts');
     expect(snapshot).not.toHaveProperty('infections');
