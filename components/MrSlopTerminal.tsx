@@ -14,6 +14,7 @@ import {
 import { SLOP_LIBRARY } from '../data/slopLibrary';
 import { buildCatalogIndex } from '../lib/catalog';
 import { createGenome } from '../lib/genome';
+import { calculateDrift } from '../lib/drift';
 import { assembleSystemInstruction } from '../lib/kernel';
 import { addGenomeChangeScar } from '../lib/scars';
 import {
@@ -30,11 +31,17 @@ import { sendMrSlopMessage } from '../services/geminiService';
 import { processFile } from '../services/fileService';
 import { isSpeechSupported, startListening, stopListening } from '../services/speechService';
 import { exportConversationToPDF, exportConversationToTXT } from '../services/exportService';
-import { checkpointSpecimen, restoreCheckpoint, saveArtifact } from '../services/specimenStore';
+import {
+  captureBirthBaseline,
+  checkpointSpecimen,
+  restoreCheckpoint,
+  saveArtifact,
+} from '../services/specimenStore';
 import {
   Attachment,
   ChoiceCardEvent,
   ChoiceCardOption,
+  ForkActionRequest,
   Genome,
   LifeHistoryEvent,
   Message,
@@ -49,6 +56,8 @@ import ChoiceCard from './ChoiceCard';
 import StructuralDecisionModal from './StructuralDecisionModal';
 import MutationCard from './MutationCard';
 import MutationStatus from './MutationStatus';
+import LineageStatus from './LineageStatus';
+import ForkResultCard from './ForkResultCard';
 import './ConversationUI.css';
 
 interface MrSlopTerminalProps {
@@ -56,6 +65,9 @@ interface MrSlopTerminalProps {
   onChange: (specimen: Specimen) => void | Promise<void>;
   onOpenSpecimens?: () => void;
   onNewSpecimen?: () => void;
+  onForkSpecimen?: (suggestedName?: string) => Promise<Specimen>;
+  onOpenSpecimen?: (specimen: Specimen) => void;
+  specimenNames?: Record<string, string>;
 }
 
 interface FailedTurn {
@@ -100,6 +112,9 @@ const specimenStateSummary = (specimen: Specimen): string => {
   const recentArtifactRefs = specimen.artifacts
     .slice(-8)
     .map(artifact => `${artifact.id} [${artifact.kind}] ${artifact.title}`);
+  const drift = calculateDrift(specimen);
+  const experiencedScars = specimen.scars.filter(scar => scar.origin === 'experienced').length;
+  const inheritedScars = specimen.scars.filter(scar => scar.origin === 'inherited').length;
 
   return [
     `Specimen: ${specimen.name}`,
@@ -110,6 +125,9 @@ const specimenStateSummary = (specimen: Specimen): string => {
     `Active acquired traits: ${traits.join(', ') || 'none'}`,
     `Active infections: ${infections.join(', ') || 'none'}`,
     `Checkpoints: ${specimen.checkpoints.length}`,
+    `Lineage generation: ${specimen.lineage.generation}`,
+    `Scars: ${experiencedScars} experienced, ${inheritedScars} inherited`,
+    `Lifetime drift: ${drift.band} (${drift.score}) · ${drift.explanation}`,
     `Recent message refs: ${recentMessageRefs.join(' | ') || 'none'}`,
     `Recent artifact refs: ${recentArtifactRefs.join(' | ') || 'none'}`,
   ].join('\n');
@@ -150,6 +168,9 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
   onChange,
   onOpenSpecimens,
   onNewSpecimen,
+  onForkSpecimen,
+  onOpenSpecimen,
+  specimenNames = {},
 }) => {
   const [working, setWorking] = useState(specimen);
   const [input, setInput] = useState('');
@@ -161,6 +182,8 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
   const [activeMutationProposal, setActiveMutationProposal] = useState<MutationProposal | null>(null);
   const [preferredMutationTurns, setPreferredMutationTurns] = useState<number | undefined>(undefined);
   const [pendingMutationAction, setPendingMutationAction] = useState<MutationActionRequest | null>(null);
+  const [pendingForkAction, setPendingForkAction] = useState<ForkActionRequest | null>(null);
+  const [forkResult, setForkResult] = useState<Specimen | null>(null);
   const [mutationChoiceActions, setMutationChoiceActions] = useState<Record<string, MutationActionRequest>>({});
   const [structuralError, setStructuralError] = useState<string | null>(null);
   const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
@@ -177,6 +200,8 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     setActiveMutationProposal(null);
     setPreferredMutationTurns(undefined);
     setPendingMutationAction(null);
+    setPendingForkAction(null);
+    setForkResult(null);
     setMutationChoiceActions({});
     setFailedTurn(null);
     setTransmissionError(null);
@@ -437,6 +462,27 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
       setActiveMutationProposal(proposal);
     }
 
+    if (envelope.forkAction && next.phase === 'spawned') {
+      setPendingForkAction(envelope.forkAction);
+      setPendingMutationAction(null);
+      setActiveChoice(null);
+      setActiveMutationProposal(null);
+      setStructuralError(null);
+      setActiveDecision({
+        type: 'structural-decision',
+        id: `fork-decision-${modelMessage.id}`,
+        title: 'THIS CREATES A FORK',
+        reason: `${envelope.forkAction.reason} The parent remains unchanged; the child starts a fresh conversation from inherited active state.`,
+        options: [{
+          id: 'create-child',
+          label: 'CREATE CHILD',
+          description: envelope.forkAction.suggestedName
+            ? `Create ${envelope.forkAction.suggestedName} as a separate specimen.`
+            : 'Create a separately saved child specimen from the current state.',
+        }],
+      });
+    }
+
     if (envelope.proposedGenome && next.phase === 'building') {
       setActiveDecision(null);
       setActiveChoice({
@@ -551,15 +597,18 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     try {
       const genome = await buildGenomeFromOption(option);
       if (!genome) return;
+      const bornAt = Date.now();
+      const birthGenome = snapshotGenome(genome);
       const next: Specimen = {
         ...working,
         phase: 'spawned',
         name: working.name === 'NEW SPECIMEN'
           ? `SLOP ${working.messages.find(message => message.role === Role.USER)?.content.slice(0, 24) || 'SPECIMEN'}`
           : working.name,
-        birthGenome: snapshotGenome(genome),
+        birthGenome,
         currentGenome: snapshotGenome(genome),
-        lastModified: Date.now(),
+        birthBaseline: captureBirthBaseline(working, birthGenome, 'native-v3', bornAt),
+        lastModified: bornAt,
       };
       commit(next);
       setActiveChoice(null);
@@ -702,6 +751,25 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
     }
   };
 
+  const applyApprovedFork = async () => {
+    if (!pendingForkAction || isProcessing) return;
+
+    setIsProcessing(true);
+    setStructuralError(null);
+
+    try {
+      if (!onForkSpecimen) throw new Error('FORK_CALLBACK_MISSING');
+      const child = await onForkSpecimen(pendingForkAction.suggestedName);
+      setForkResult(child);
+      setPendingForkAction(null);
+      setActiveDecision(null);
+    } catch {
+      setStructuralError('The fork could not be saved. The parent is unchanged; you can retry.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const startProposedInfection = (
     proposal: MutationProposal,
     duration: { mode: 'turns'; turns: number } | { mode: 'indefinite' },
@@ -802,6 +870,8 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
         )}
       />
 
+      <LineageStatus specimen={working} specimenNames={specimenNames} />
+
       <div className="slop-chat-log" ref={scrollRef}>
         {working.messages.length === 0 && (
           <div className="slop-empty-chat">
@@ -868,6 +938,17 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           />
         )}
 
+        {forkResult && !activeDecision && (
+          <ForkResultCard
+            child={forkResult}
+            onOpenChild={() => {
+              onOpenSpecimen?.(forkResult);
+              setForkResult(null);
+            }}
+            onStay={() => setForkResult(null)}
+          />
+        )}
+
         {transmissionError && (
           <div className="slop-chat-error" role="alert">
             <span>{transmissionError}</span>
@@ -929,17 +1010,20 @@ const MrSlopTerminal: React.FC<MrSlopTerminalProps> = ({
           busy={isProcessing}
           error={structuralError}
           onApprove={option => {
-            if (pendingMutationAction) applyApprovedMutation();
+            if (pendingForkAction) void applyApprovedFork();
+            else if (pendingMutationAction) applyApprovedMutation();
             else void applyStructural(option);
           }}
           onCancel={() => {
             setActiveDecision(null);
             setPendingMutationAction(null);
+            setPendingForkAction(null);
             setStructuralError(null);
           }}
           onAnswerInChat={() => {
             setActiveDecision(null);
             setPendingMutationAction(null);
+            setPendingForkAction(null);
             setStructuralError(null);
             requestAnimationFrame(() => inputRef.current?.focus());
           }}
