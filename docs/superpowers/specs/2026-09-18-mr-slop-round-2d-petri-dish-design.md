@@ -4,7 +4,7 @@ Date: 2026-09-18
 
 ## Status
 
-Conversational architecture approved enough to formalize. Written design pending final user approval before implementation planning.
+Approved and implemented as Round 2D. Mocked end-to-end acceptance is part of the final implementation gate. Live-provider verification remains separate from the state/UI contract if the known Gemini/API-key runtime mismatch is still present.
 
 ## 1. Purpose
 
