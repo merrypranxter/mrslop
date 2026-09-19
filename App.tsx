@@ -230,7 +230,10 @@ function App() {
     });
 
     try {
-      const completed = await runPetriTrial(trial, { signal: controller.signal });
+      const completed = await runPetriTrial(trial, {
+        signal: controller.signal,
+        onProgress: setActivePetriTrial,
+      });
       setActivePetriTrial(completed);
       await storePetriTrial(completed);
     } catch {
@@ -260,7 +263,9 @@ function App() {
     if (!activePetriTrial || isPetriRunning) return;
     setIsPetriRunning(true);
     try {
-      const next = await retryPetriEntrant(activePetriTrial, entrantSnapshotId);
+      const next = await retryPetriEntrant(activePetriTrial, entrantSnapshotId, {
+        onProgress: setActivePetriTrial,
+      });
       setActivePetriTrial(next);
       await storePetriTrial(next);
     } catch {
