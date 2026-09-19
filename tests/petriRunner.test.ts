@@ -197,6 +197,61 @@ describe('Petri trial runner', () => {
     expect(b?.outputText).toBe('b-ok');
   });
 
+  it('emits immutable live progress snapshots as entrants start and finish', async () => {
+    const entrants = [snapshot('a'), snapshot('b')];
+    const trial = createPetriTrial({
+      challenge: 'pressure',
+      entrants,
+      config,
+      now: 10,
+      idFactory: () => 'trial-1',
+    });
+
+    let releaseA!: () => void;
+    let releaseB!: () => void;
+    const gateA = new Promise<void>(resolve => { releaseA = resolve; });
+    const gateB = new Promise<void>(resolve => { releaseB = resolve; });
+
+    const generate = vi.fn(async ({ systemInstruction }: any) => {
+      if (systemInstruction.includes('Specimen: A')) await gateA;
+      else await gateB;
+      return { text: systemInstruction.includes('Specimen: A') ? 'a-ok' : 'b-ok' };
+    });
+
+    const progress: any[] = [];
+    const running = runPetriTrial(trial, {
+      generate,
+      onProgress: next => progress.push(next),
+    });
+
+    await vi.waitFor(() => {
+      expect(progress.some(next =>
+        next.results.some((item: any) => item.status === 'running'))).toBe(true);
+    });
+
+    const firstRunning = progress.find(next =>
+      next.results.some((item: any) => item.status === 'running'));
+    expect(firstRunning).not.toBe(trial);
+    expect(trial.status).toBe('draft');
+    expect(trial.results.every(item => item.status === 'pending')).toBe(true);
+
+    releaseA();
+    await vi.waitFor(() => {
+      expect(progress.some(next =>
+        next.results.some((item: any) =>
+          item.entrantSnapshotId === 'snapshot-a' && item.status === 'succeeded',
+        ))).toBe(true);
+    });
+
+    releaseB();
+    const result = await running;
+
+    expect(result.status).toBe('complete');
+    expect(progress.at(-1)?.status).toBe('complete');
+    expect(progress.at(-1)?.results.every((item: any) => item.status === 'succeeded'))
+      .toBe(true);
+  });
+
   it('pre-aborted runs mark unfinished entrants aborted without generation calls', async () => {
     const trial = createPetriTrial({
       challenge: 'pressure',

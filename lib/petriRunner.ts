@@ -46,11 +46,19 @@ export interface RunPetriOptions {
   generate?: PetriGenerate;
   signal?: AbortSignal;
   now?: () => number;
+  onProgress?: (trial: PetriTrial) => void;
 }
 
 const clock = (now?: () => number): (() => number) => now ?? (() => Date.now());
 
 const cloneTrial = (trial: PetriTrial): PetriTrial => structuredClone(trial);
+
+const emitProgress = (
+  trial: PetriTrial,
+  onProgress?: (trial: PetriTrial) => void,
+): void => {
+  onProgress?.(cloneTrial(trial));
+};
 
 const validateEntrants = (entrants: PetriEntrantSnapshot[]): void => {
   if (entrants.length < 2 || entrants.length > 8) {
@@ -287,6 +295,7 @@ export const runPetriTrial = async (
   trial.status = 'running';
   trial.startedAt = trial.startedAt ?? now();
   trial.lastModified = trial.startedAt;
+  emitProgress(trial, options.onProgress);
 
   const snapshotById = new Map(trial.entrants.map(item => [item.id, item]));
   let cursor = 0;
@@ -301,11 +310,23 @@ export const runPetriTrial = async (
       const snapshot = snapshotById.get(current.entrantSnapshotId);
       if (!snapshot) throw new Error('PETRI_SNAPSHOT_NOT_FOUND');
 
-      trial.results[index] = await executeAttempt(trial, snapshot, current, {
+      const runningResult: PetriEntrantResult = {
+        ...current,
+        status: 'running',
+        errorCode: undefined,
+        errorMessage: undefined,
+      };
+      trial.results[index] = runningResult;
+      trial.lastModified = now();
+      emitProgress(trial, options.onProgress);
+
+      trial.results[index] = await executeAttempt(trial, snapshot, runningResult, {
         generate,
         signal: options.signal,
         now,
       });
+      trial.lastModified = now();
+      emitProgress(trial, options.onProgress);
     }
   };
 
@@ -315,6 +336,7 @@ export const runPetriTrial = async (
   trial.status = deriveTrialStatus(trial.results);
   trial.completedAt = now();
   trial.lastModified = trial.completedAt;
+  emitProgress(trial, options.onProgress);
   return trial;
 };
 
@@ -340,16 +362,32 @@ export const retryPetriEntrant = async (
   const now = clock(options.now);
   const generate = options.generate ?? sendPetriGeneration;
   trial.status = 'running';
-  trial.results[resultIndex] = await executeAttempt(trial, snapshot, current, {
-    generate,
-    signal: options.signal,
-    now,
-  });
+  trial.results[resultIndex] = {
+    ...current,
+    status: 'running',
+    errorCode: undefined,
+    errorMessage: undefined,
+  };
+  trial.lastModified = now();
+  emitProgress(trial, options.onProgress);
+
+  trial.results[resultIndex] = await executeAttempt(
+    trial,
+    snapshot,
+    trial.results[resultIndex],
+    {
+      generate,
+      signal: options.signal,
+      now,
+    },
+  );
+  emitProgress(trial, options.onProgress);
 
   trial.status = deriveTrialStatus(trial.results);
   if (trial.status === 'complete') {
     trial.completedAt = now();
   }
   trial.lastModified = now();
+  emitProgress(trial, options.onProgress);
   return trial;
 };
