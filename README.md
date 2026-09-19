@@ -216,6 +216,95 @@ A bred child starts with:
 
 Breeding itself makes **zero Gemini calls**.
 
+## Round 2D Petri Dish and phenotype trials
+
+Round 2D adds a dedicated **Petri Dish** for comparing several existing spawned specimens under one shared text challenge.
+
+A Petri trial is observational. It freezes trial-local copies of each entrant's **current lived runtime state**, runs the same challenge/settings against those frozen copies, stores the raw outputs or failures, and lets the human decide which results are interesting. The trial itself does **not** mutate the live specimens.
+
+### Entrants and frozen state
+
+Each trial accepts **2–8 distinct spawned specimens**. Building specimens are not eligible.
+
+At run time, each entrant snapshot captures the runtime-relevant current state:
+
+- current STACK genome or persisted FUSE kernel;
+- active acquired traits;
+- active temporary infections including remaining duration;
+- lineage/generation and factual drift information for display; and
+- a deterministic Petri entrant-state hash.
+
+Ordinary chat messages, artifacts, checkpoints, retired traits, inactive infections, unrelated life history, and later specimen changes do not enter the frozen runtime.
+
+A Petri trial never recompiles FUSE. A selected FUSE entrant must already have its persisted compiled kernel.
+
+### Isolation and call-count semantics
+
+The Petri generation client is separate from ordinary Mr. Slop chat. Each entrant receives:
+
+- empty conversation history;
+- the exact same shared user challenge;
+- the same model, temperature, max-output-token setting, and Petri instruction version;
+- one system instruction assembled from that entrant's frozen state; and
+- no mutation/fork/build response-envelope contract.
+
+The setup screen states the expected call count before execution:
+
+> N specimens = N generation calls
+
+Round 2D makes no hidden judge, ranking, critique, or mate-selection calls. The client runs at most **3 entrant requests concurrently**.
+
+A failed entrant is stored as a failure. The app does not silently turn it into a new experimental attempt. An explicit retry creates a new recorded attempt for that entrant only.
+
+### Phenotype evidence, not objective fitness
+
+A successful Petri result is called a **phenotype observation**: the raw output produced by one frozen specimen under defined conditions.
+
+This is not a neural hidden-state measurement and it is not an objective biological fitness score. Mr. Slop does not automatically rank entrants, declare a generally superior specimen, recommend an optimal mate, or perform autonomous selection.
+
+The human may select **none, one, or multiple** outputs. Selection is stored as challenge-specific human judgment and can be made in **BLIND VIEW**, where stable A/B/C-style labels hide specimen names until reveal.
+
+### Non-destructive semantics
+
+Running or selecting within a Petri trial does not change a live specimen's:
+
+- messages or artifacts;
+- genome;
+- traits or infections;
+- scars or checkpoints;
+- life history;
+- lineage or genetics receipt;
+- drift baseline; or
+- last-modified time.
+
+An active turn-limited infection can influence the frozen Petri runtime, but the live specimen's remaining-turn count is not decremented by the trial.
+
+### Persistence and history
+
+Petri records are stored separately under:
+
+`mrslop_petri_trials_v1`
+
+They do not share the specimen key `mrslop_specimens_v1`, and Round 2D does not read, migrate, rewrite, or delete `ghost_sessions`.
+
+Saved trials can be reopened without regeneration. Historical outputs remain exactly as stored. Human selection may be revised explicitly after reload.
+
+### OPEN / FORK / BREED SELECTED
+
+Post-trial actions hand off to the existing specimen engines.
+
+- **OPEN** resolves the current live specimen by specimen ID.
+- **FORK** uses the existing fork path.
+- **BREED SELECTED** appears only when exactly two entrants are selected and opens the existing Round 2C breeding preview.
+
+The Petri snapshot is never used as stale genetic material. If a selected specimen has changed since the trial, breeding uses its **current live state** at preview time.
+
+### Live-provider verification boundary
+
+Round 2D's state, persistence, hashing, runner, UI, selection, history, and end-to-end acceptance are testable with the generation transport mocked.
+
+The known Gemini/API-key runtime mismatch remains isolated from those mechanics. If that external transport issue is still present, live-provider Petri verification is pending rather than weakening the mocked acceptance contract.
+
 ## Gemini / Google AI Studio
 
 Gemini calls are server-side. The browser posts to Mr. Slop's same-origin API routes:
@@ -259,9 +348,10 @@ The important separation is:
 3. **Mutation layer** — acquired traits plus active temporary infections, applied at runtime.
 4. **Lineage/history state** — schema-v4 root/fork/bred lineage, birth baseline, typed scars, offspring history, and append-only life-history evidence.
 5. **Deterministic genetics layer** — breeding-state hashes, seeded crossover, trait inheritance, birth mutation, and replayable genetics receipts without model calls.
-6. **Deterministic drift layer** — explainable lifetime distance from this specimen's own birth baseline, computed without model calls.
-7. **Software state** — messages, checkpoints, artifacts, persistence, and controller/trajectory placeholders.
-8. **Server transport** — Gemini generation and one-time FUSE compilation without exposing the API key to the client.
+6. **Petri experiment layer** — frozen lived-state snapshots, deterministic state hashes, isolated plain generation, bounded multi-entrant execution, human selection, and dedicated trial persistence.
+7. **Deterministic drift layer** — explainable lifetime distance from this specimen's own birth baseline, computed without model calls.
+8. **Software state** — messages, checkpoints, artifacts, persistence, Petri history, and controller/trajectory placeholders.
+9. **Server transport** — Gemini generation and one-time FUSE compilation without exposing the API key to the client.
 
 ## Round 2C non-goals
 
