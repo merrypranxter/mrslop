@@ -100,13 +100,7 @@ describe('Round 2D Petri Dish acceptance', () => {
       compilerVersion: 'test-fuse-v1',
     }, 'GAMMA FUSE', 'spawned');
 
-    const forked = forkSpecimen(alpha, 'DELTA DESCENDANT', {
-      now: 200,
-      idFactory: (() => {
-        let i = 0;
-        return () => `fork-id-${i++}`;
-      })(),
-    });
+    const forked = forkSpecimen(alpha, 'DELTA DESCENDANT', 200);
     alpha = forked.parent;
     const delta = forked.child;
 
